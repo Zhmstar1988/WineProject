@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: headContent(${pageTitle})}"></head>
+<body>
+<div th:replace="~{layout :: body(${role}, ${roleName}, ${pageTitle})}"></div>
+
+<div class="main-content">
+    <h4 class="mb-3">换瓶 SOP</h4>
+    <div class="alert alert-info"><i class="bi bi-info-circle"></i> 标准换瓶流程：整瓶红酒到货验收 → 物理换瓶 → 录入瓶位/容量 → 容量重置。残留量 ≤10ml 自动核销，>10ml 触发损耗审计。</div>
+    <div class="card stat-card p-4" style="max-width:600px">
+        <form id="bottleForm">
+            <div class="mb-3"><label class="form-label">分酒机ID</label><input class="form-control" id="f-dispenserId" type="number" required></div>
+            <div class="mb-3"><label class="form-label">瓶位号 (1~8)</label><input class="form-control" id="f-slotNo" type="number" min="1" max="8" required></div>
+            <div class="mb-3"><label class="form-label">酒款SKU ID</label><input class="form-control" id="f-wineSkuId" type="number" required></div>
+            <div class="row">
+                <div class="col"><label class="form-label">初始容量 (ml)</label><input class="form-control" id="f-initialCapacity" type="number" value="750" required></div>
+                <div class="col"><label class="form-label">上瓶残留量 (ml)</label><input class="form-control" id="f-residualMl" type="number" value="0"></div>
+            </div>
+            <div class="mb-3 mt-3"><label class="form-label">批次号</label><input class="form-control" id="f-batchNo"></div>
+            <button type="submit" class="btn btn-danger w-100"><i class="bi bi-arrow-repeat"></i> 确认换瓶</button>
+        </form>
+        <div id="resultMsg" class="mt-3"></div>
+    </div>
+</div>
+
+<script th:replace="~{layout :: scripts}"></script>
+<script>
+document.getElementById('bottleForm').onsubmit = async function(e) {
+    e.preventDefault();
+    const body = {
+        dispenserId: parseInt(document.getElementById('f-dispenserId').value),
+        slotNo: parseInt(document.getElementById('f-slotNo').value),
+        wineSkuId: parseInt(document.getElementById('f-wineSkuId').value),
+        initialCapacity: parseInt(document.getElementById('f-initialCapacity').value),
+        residualMl: parseInt(document.getElementById('f-residualMl').value || 0),
+        batchNo: document.getElementById('f-batchNo').value
+    };
+    const res = await apiPost('/admin/change-bottle', body);
+    const box = document.getElementById('resultMsg');
+    if (res.code === 200) {
+        box.innerHTML = '<div class="alert alert-success">换瓶成功，容量已重置！</div>';
+        document.getElementById('bottleForm').reset();
+    } else {
+        box.innerHTML = '<div class="alert alert-danger">' + res.message + '</div>';
+    }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

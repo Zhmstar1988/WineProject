@@ -1,0 +1,40 @@
+# XcodeGen 工程描述文件
+# 用法：在 wine-ios 目录下 `xcodegen generate` 生成 WineDispenser.xcodeproj
+# 文档：https://github.com/yonaskolb/XcodeGen
+name: WineDispenser
+options:
+  bundleIdPrefix: com.wine
+  deploymentTarget:
+    ios: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CODE_SIGNING_REQUIRED: NO
+    CODE_SIGNING_ALLOWED: NO
+    CODE_SIGN_IDENTITY: ""
+    DEVELOPMENT_TEAM: ""
+targets:
+  WineDispenser:
+    type: application
+    platform: iOS
+    sources:
+      - path: WineDispenser
+    info:
+      path: WineDispenser/Info.plist
+      properties:
+        CFBundleDisplayName: WineDispenser
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen:
+          UIColorName: ""
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        WINE_API_BASE_URL: http://localhost:8080/api
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.wine.dispenser
+        TARGETED_DEVICE_FAMILY: "1"
+        ENABLE_PREVIEWS: YES

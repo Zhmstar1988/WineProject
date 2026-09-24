@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: headContent(${pageTitle})}"></head>
+<body>
+<div th:replace="~{layout :: body(${role}, ${roleName}, ${pageTitle})}"></div>
+
+<div class="main-content">
+    <h4 class="mb-3" th:text="${role == 5} ? '全局订单流水' : '本店订单流水'">订单</h4>
+    <div class="card stat-card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr>
+                    <th>订单号</th><th>酒吧</th><th>分酒机</th><th>瓶位</th>
+                    <th>酒款</th><th>杯量</th><th>金额</th><th>订单状态</th><th>支付状态</th><th>创建时间</th>
+                </tr></thead>
+                <tbody id="tbody"><tr><td colspan="10" class="text-center text-muted">加载中...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script th:replace="~{layout :: scripts}"></script>
+<script>
+const orderStatusMap = {1:{text:'待支付',cls:'secondary'},2:{text:'支付中',cls:'warning'},3:{text:'已付款',cls:'info'},4:{text:'已完成',cls:'success'},5:{text:'已退款',cls:'danger'}};
+const payStatusMap = {0:{text:'未支付',cls:'secondary'},1:{text:'成功',cls:'success'},2:{text:'失败',cls:'danger'},3:{text:'已退款',cls:'warning'}};
+
+async function load() {
+    const res = await apiGet('/admin/orders');
+    const list = res.data || [];
+    document.getElementById('tbody').innerHTML = list.length ? list.map(o=>`
+        <tr>
+            <td><code>${o.orderNo}</code></td><td>酒吧#${o.barId}</td><td>#${o.dispenserId}</td><td>${o.slotNo}号</td>
+            <td>SKU#${o.wineSkuId}</td><td>${o.volumeMl}ml</td><td>${fmtMoney(o.paidAmount)}</td>
+            <td>${statusTag(o.status, orderStatusMap)}</td>
+            <td>${statusTag(o.payStatus, payStatusMap)}</td>
+            <td>${o.createTime||''}</td>
+        </tr>`).join('') : '<tr><td colspan="10" class="text-center text-muted">暂无订单</td></tr>';
+}
+load();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

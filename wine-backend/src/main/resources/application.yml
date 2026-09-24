@@ -1,0 +1,103 @@
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: wine-backend
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+
+  # MySQL 数据库（支持 Docker 环境变量注入）
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:winedb}?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Singapore&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  sql:
+    init:
+      mode: ${SQL_INIT_MODE:always}
+      continue-on-error: true
+      schema-locations: classpath:db/schema.sql
+      data-locations: classpath:db/data.sql
+
+  # Redis 配置（分布式锁/缓存/在机容量互斥）
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 0
+          max-wait: 3000ms
+
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Singapore
+
+  # Thymeleaf 模板配置（管理后台）
+  thymeleaf:
+    prefix: classpath:/templates/admin/
+    suffix: .html
+    mode: HTML
+    cache: ${THYMELEAF_CACHE:false}
+
+# MyBatis-Plus 配置
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.wine.domain
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: ASSIGN_ID
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# JWT 配置
+jwt:
+  secret: WineSingapore2026SecretKeyForJWTTokenGenerationMustBeLongEnough
+  expiration: 604800000   # 7天
+  header: Authorization
+  prefix: "Bearer "
+
+# 通联国际 CNP 配置（环境差异化配置见 application-dev.yml / application-prod.yml）
+# 切换方式：SPRING_PROFILES_ACTIVE=dev (测试) 或 prod (生产)
+# 敏感信息（mcht-id/private-key/public-key）统一由环境变量 ALLINPAY_INTL_* 注入
+
+# 分酒机 IoT 配置
+dispenser:
+  base-url: http://dispenser.local
+  sla:
+    command-timeout-ms: 3000
+    dispense-timeout-ms: 30000
+    network-tolerance-ms: 45000
+
+# 业务配置
+wine:
+  order:
+    pay-timeout-minutes: 15
+  age:
+    legal-age: 18
+  lock:
+    in-machine-prefix: "wine:lock:slot:"
+    user-lock-prefix: "wine:lock:user:"
+
+logging:
+  level:
+    com.wine: ${LOG_LEVEL:debug}
+    org.springframework.security: info

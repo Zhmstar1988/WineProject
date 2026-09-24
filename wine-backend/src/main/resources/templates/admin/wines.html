@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: headContent(${pageTitle})}"></head>
+<body>
+<div th:replace="~{layout :: body(${role}, ${roleName}, ${pageTitle})}"></div>
+
+<div class="main-content">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0" th:text="${role == 6} ? '我的酒款' : '酒款管理'">酒款</h4>
+        <button class="btn btn-danger" onclick="openEdit()"><i class="bi bi-plus"></i> 新增酒款</button>
+    </div>
+    <div class="card stat-card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr>
+                    <th>酒款名称</th><th>产区</th><th>年份</th><th>葡萄品种</th>
+                    <th>酒精度</th><th>供应商</th><th>状态</th><th>操作</th>
+                </tr></thead>
+                <tbody id="tbody"><tr><td colspan="8" class="text-center text-muted">加载中...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="modalTitle">新增酒款</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <input type="hidden" id="f-id">
+            <div class="mb-3"><label class="form-label">酒款名称</label><input class="form-control" id="f-wineName"></div>
+            <div class="row">
+                <div class="col"><label class="form-label">产区/国家</label><input class="form-control" id="f-origin"></div>
+                <div class="col"><label class="form-label">年份</label><input class="form-control" id="f-vintage" type="number"></div>
+            </div>
+            <div class="row mt-3">
+                <div class="col"><label class="form-label">葡萄品种</label><input class="form-control" id="f-grapeType"></div>
+                <div class="col"><label class="form-label">酒精度</label><input class="form-control" id="f-alcohol"></div>
+            </div>
+            <div class="mb-3 mt-3"><label class="form-label">供应商ID</label><input class="form-control" id="f-supplierId" type="number"></div>
+            <div class="mb-3"><label class="form-label">简介</label><textarea class="form-control" id="f-description" rows="2"></textarea></div>
+            <div><label class="form-label">状态</label>
+                <select class="form-select" id="f-status"><option value="1">在售</option><option value="0">下架</option></select></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+            <button class="btn btn-danger" onclick="save()">保存</button>
+        </div>
+    </div></div>
+</div>
+
+<script th:replace="~{layout :: scripts}"></script>
+<script>
+async function load() {
+    const res = await apiGet('/wines');
+    const list = res.data || [];
+    document.getElementById('tbody').innerHTML = list.length ? list.map(w=>`
+        <tr>
+            <td>${w.wineName}</td><td>${w.origin||''}</td><td>${w.vintage||'-'}</td><td>${w.grapeType||''}</td>
+            <td>${w.alcohol||''}</td><td>供应商#${w.supplierId||'-'}</td>
+            <td>${statusTag(w.status, {1:{text:'在售',cls:'success'},0:{text:'下架',cls:'secondary'}})}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary" onclick='openEdit(${JSON.stringify(w)})'>编辑</button>
+                <button class="btn btn-sm btn-outline-danger" onclick="del(${w.id})">删除</button>
+            </td>
+        </tr>`).join('') : '<tr><td colspan="8" class="text-center text-muted">暂无酒款</td></tr>';
+}
+
+function openEdit(w) {
+    w = w || {};
+    document.getElementById('modalTitle').textContent = w.id ? '编辑酒款' : '新增酒款';
+    document.getElementById('f-id').value = w.id || '';
+    document.getElementById('f-wineName').value = w.wineName || '';
+    document.getElementById('f-origin').value = w.origin || '';
+    document.getElementById('f-vintage').value = w.vintage || '';
+    document.getElementById('f-grapeType').value = w.grapeType || '';
+    document.getElementById('f-alcohol').value = w.alcohol || '';
+    document.getElementById('f-supplierId').value = w.supplierId || '';
+    document.getElementById('f-description').value = w.description || '';
+    document.getElementById('f-status').value = w.status ?? 1;
+    new bootstrap.Modal(document.getElementById('editModal')).show();
+}
+
+async function save() {
+    const body = {
+        id: document.getElementById('f-id').value || null,
+        wineName: document.getElementById('f-wineName').value,
+        origin: document.getElementById('f-origin').value,
+        vintage: parseInt(document.getElementById('f-vintage').value) || null,
+        grapeType: document.getElementById('f-grapeType').value,
+        alcohol: document.getElementById('f-alcohol').value,
+        supplierId: parseInt(document.getElementById('f-supplierId').value) || null,
+        description: document.getElementById('f-description').value,
+        status: parseInt(document.getElementById('f-status').value)
+    };
+    const res = body.id ? await apiPut('/wines/'+body.id, body) : await apiPost('/wines', body);
+    if (res.code === 200) { bootstrap.Modal.getInstance(document.getElementById('editModal')).hide(); load(); }
+    else alert(res.message);
+}
+
+async function del(id) {
+    if (!confirm('确认删除该酒款？')) return;
+    await apiDelete('/wines/' + id);
+    load();
+}
+load();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

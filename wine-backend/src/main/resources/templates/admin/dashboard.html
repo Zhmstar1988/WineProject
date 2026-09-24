@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: headContent(${pageTitle})}"></head>
+<body>
+<div th:replace="~{layout :: body(${role}, ${roleName}, ${pageTitle})}"></div>
+
+<div class="main-content">
+    <h4 class="mb-4" th:text="${pageTitle}">概览</h4>
+
+    <!-- 平台运营统计 -->
+    <div th:if="${role == 5}" class="row g-3 mb-4">
+        <div class="col-md-3"><div class="card stat-card p-3"><div class="d-flex align-items-center"><div class="icon-box bg-primary-subtle text-primary"><i class="bi bi-shop"></i></div><div class="ms-3"><div class="text-muted small">合作酒吧</div><h3 class="mb-0" id="stat-bars">-</h3></div></div></div></div>
+        <div class="col-md-3"><div class="card stat-card p-3"><div class="d-flex align-items-center"><div class="icon-box bg-success-subtle text-success"><i class="bi bi-cpu"></i></div><div class="ms-3"><div class="text-muted small">在线设备</div><h3 class="mb-0" id="stat-dispensers">-</h3></div></div></div></div>
+        <div class="col-md-3"><div class="card stat-card p-3"><div class="d-flex align-items-center"><div class="icon-box bg-warning-subtle text-warning"><i class="bi bi-droplet"></i></div><div class="ms-3"><div class="text-muted small">酒款SKU</div><h3 class="mb-0" id="stat-wines">-</h3></div></div></div></div>
+        <div class="col-md-3"><div class="card stat-card p-3"><div class="d-flex align-items-center"><div class="icon-box bg-danger-subtle text-danger"><i class="bi bi-receipt"></i></div><div class="ms-3"><div class="text-muted small">今日订单</div><h3 class="mb-0" id="stat-orders">-</h3></div></div></div></div>
+    </div>
+
+    <!-- 酒吧运营统计 -->
+    <div th:if="${role == 2}" class="row g-3 mb-4">
+        <div class="col-md-3"><div class="card stat-card p-3"><div class="d-flex align-items-center"><div class="icon-box bg-success-subtle text-success"><i class="bi bi-cpu"></i></div><div class="ms-3"><div class="text-muted small">本店设备</div><h3 class="mb-0" id="s-disp">-</h3></div></div></div></div>
+        <div class="col-md-3"><div class="card stat-card p-3"><div class="d-flex align-items-center"><div class="icon-box bg-primary-subtle text-primary"><i class="bi bi-cash-coin"></i></div><div class="ms-3"><div class="text-muted small">今日营业额(SGD)</div><h3 class="mb-0" id="s-rev">-</h3></div></div></div></div>
+        <div class="col-md-3"><div class="card stat-card p-3"><div class="d-flex align-items-center"><div class="icon-box bg-warning-subtle text-warning"><i class="bi bi-receipt"></i></div><div class="ms-3"><div class="text-muted small">今日订单</div><h3 class="mb-0" id="s-ord">-</h3></div></div></div></div>
+        <div class="col-md-3"><div class="card stat-card p-3"><div class="d-flex align-items-center"><div class="icon-box bg-danger-subtle text-danger"><i class="bi bi-exclamation-triangle"></i></div><div class="ms-3"><div class="text-muted small">需换瓶位</div><h3 class="mb-0" id="s-low">-</h3></div></div></div></div>
+    </div>
+
+    <!-- 供酒商统计 -->
+    <div th:if="${role == 6}" class="row g-3 mb-4">
+        <div class="col-md-4"><div class="card stat-card p-3"><div class="d-flex align-items-center"><div class="icon-box bg-primary-subtle text-primary"><i class="bi bi-droplet"></i></div><div class="ms-3"><div class="text-muted small">供应酒款</div><h3 class="mb-0" id="s-wine">-</h3></div></div></div></div>
+        <div class="col-md-4"><div class="card stat-card p-3"><div class="d-flex align-items-center"><div class="icon-box bg-success-subtle text-success"><i class="bi bi-truck"></i></div><div class="ms-3"><div class="text-muted small">供酒次数</div><h3 class="mb-0" id="s-del">-</h3></div></div></div></div>
+        <div class="col-md-4"><div class="card stat-card p-3"><div class="d-flex align-items-center"><div class="icon-box bg-warning-subtle text-warning"><i class="bi bi-graph-up"></i></div><div class="ms-3"><div class="text-muted small">累计销量(杯)</div><h3 class="mb-0" id="s-sale">-</h3></div></div></div></div>
+    </div>
+
+    <!-- 平台端：异常提醒 -->
+    <div th:if="${role == 5}" class="card stat-card p-4">
+        <h5><i class="bi bi-bell"></i> 履约核对异常提醒</h5>
+        <div id="anomaly-list" class="mt-3"><div class="text-muted">加载中...</div></div>
+    </div>
+
+    <!-- 酒吧端：设备状态 -->
+    <div th:if="${role == 2}" class="card stat-card p-4">
+        <h5><i class="bi bi-cpu"></i> 分酒机实时状态</h5>
+        <div id="bar-disp-list" class="mt-3"><div class="text-muted">加载中...</div></div>
+    </div>
+</div>
+
+<script th:replace="~{layout :: scripts}"></script>
+<script th:inline="javascript">
+const role = /*[[${role}]]*/ 0;
+
+async function loadDashboard() {
+    if (role === 5) {
+        const [bars, dispensers, wines, orders, anomalies] = await Promise.all([
+            apiGet('/admin/bars'), apiGet('/admin/dispensers'),
+            fetch('/api/wines').then(r=>r.json()).catch(()=>({data:[]})),
+            fetch('/api/admin/orders').then(r=>r.json()).catch(()=>({data:[]})),
+            fetch('/api/admin/reconcile').then(r=>r.json()).catch(()=>({data:[]}))
+        ]);
+        document.getElementById('stat-bars').textContent = (bars.data||[]).length;
+        document.getElementById('stat-dispensers').textContent = (dispensers.data||[]).filter(d=>d.status===1).length + '/' + (dispensers.data||[]).length;
+        document.getElementById('stat-wines').textContent = (wines.data||[]).length;
+        const today = new Date().toISOString().slice(0,10);
+        document.getElementById('stat-orders').textContent = (orders.data||[]).filter(o=>(o.createTime||'').startsWith(today)).length;
+        const anomalyList = (anomalies.data||[]).filter(a=>a.reconcileResult!==1).slice(0,5);
+        const box = document.getElementById('anomaly-list');
+        const typeMap = {2:'<span class="badge bg-warning">异常A-漏单</span>',3:'<span class="badge bg-danger">异常B-盗刷</span>',4:'<span class="badge bg-info">异常C-损耗</span>',5:'<span class="badge bg-secondary">异常D-授权不一致</span>'};
+        box.innerHTML = anomalyList.length ? anomalyList.map(a=>`<div class="border-bottom py-2"><div class="d-flex justify-content-between"><span>订单 ${a.orderNo}</span>${typeMap[a.reconcileResult]||''}</div><small class="text-muted">${a.anomalyDesc||''}</small></div>`).join('') : '<div class="text-success">暂无异常</div>';
+    } else if (role === 2) {
+        const dispensers = await apiGet('/admin/dispensers');
+        const list = dispensers.data||[];
+        document.getElementById('s-disp').textContent = list.length;
+        let orders = await apiGet('/admin/orders');
+        orders = orders.data||[];
+        const today = new Date().toISOString().slice(0,10);
+        const todayOrders = orders.filter(o=>(o.createTime||'').startsWith(today));
+        document.getElementById('s-ord').textContent = todayOrders.length;
+        document.getElementById('s-rev').textContent = todayOrders.reduce((s,o)=>s+(o.paidAmount||0),0).toFixed(2);
+        let lowCount = 0;
+        for (const d of list) {
+            const slots = await apiGet('/admin/slots/' + d.id);
+            (slots.data||[]).forEach(s=>{ if ((s.currentCapacity||0) < 150) lowCount++; });
+        }
+        document.getElementById('s-low').textContent = lowCount;
+        document.getElementById('bar-disp-list').innerHTML = list.length ? list.map(d=>`<div class="d-flex justify-content-between align-items-center border-bottom py-2"><span><i class="bi bi-cpu"></i> ${d.deviceName} (${d.deviceNo})</span>${statusTag(d.status,{0:{text:'离线',cls:'secondary'},1:{text:'在线',cls:'success'},2:{text:'故障',cls:'danger'}})}</div>`).join('') : '<div class="text-muted">暂无设备</div>';
+    } else if (role === 6) {
+        const wines = await fetch('/api/wines').then(r=>r.json()).catch(()=>({data:[]}));
+        document.getElementById('s-wine').textContent = (wines.data||[]).length;
+        document.getElementById('s-del').textContent = '-';
+        document.getElementById('s-sale').textContent = '-';
+    }
+}
+loadDashboard();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

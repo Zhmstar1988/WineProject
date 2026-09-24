@@ -1,0 +1,62 @@
+# Build artifacts
+wine-android/app/build/
+wine-android/.gradle/
+wine-android/build/
+wine-android/local.properties
+wine-backend/target/
+*.class
+*.jar
+!wine-backend/target/wine-backend-1.0.0.jar
+
+# Gradle
+.gradle/
+build/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Redis
+dump.rdb
+redis/
+
+# Screenshots & temp
+screen*.png
+ui*.xml
+javac-args.txt
+
+# Maven
+apache-maven-*/
+
+# Node
+node_modules/
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+DerivedData/
+build/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# XcodeGen generated (we commit project.yml only)
+wine-ios/WineDispenser.xcodeproj/

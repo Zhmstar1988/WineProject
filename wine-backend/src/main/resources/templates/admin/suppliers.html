@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: headContent(${pageTitle})}"></head>
+<body>
+<div th:replace="~{layout :: body(${role}, ${roleName}, ${pageTitle})}"></div>
+
+<div class="main-content">
+    <h4 class="mb-3">供酒商管理</h4>
+    <div class="card stat-card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr>
+                    <th>供应商ID</th><th>昵称</th><th>手机号</th><th>状态</th><th>注册时间</th>
+                </tr></thead>
+                <tbody id="tbody"><tr><td colspan="5" class="text-center text-muted">加载中...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script th:replace="~{layout :: scripts}"></script>
+<script>
+async function load() {
+    const res = await apiGet('/admin/suppliers');
+    const list = res.data || [];
+    document.getElementById('tbody').innerHTML = list.length ? list.map(s=>`
+        <tr>
+            <td>#${s.id}</td><td>${s.nickname||''}</td><td>${s.phone||'-'}</td>
+            <td>${statusTag(s.status, {1:{text:'正常',cls:'success'},0:{text:'禁用',cls:'secondary'}})}</td>
+            <td>${s.createTime||''}</td>
+        </tr>`).join('') : '<tr><td colspan="5" class="text-center text-muted">暂无供酒商</td></tr>';
+}
+load();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

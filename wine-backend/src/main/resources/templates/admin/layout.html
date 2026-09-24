@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<!-- ===== 公共 head ===== -->
+<head th:fragment="headContent(title)">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${title} ?: '智能分酒管理后台'">管理后台</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root { --wine-dark: #1a1a2e; --wine-red: #8B0000; --wine-gold: #C5A572; }
+        body { background: #f5f6fa; }
+        .sidebar { background: var(--wine-dark); min-height: 100vh; width: 240px; position: fixed; left: 0; top: 0; padding-top: 60px; z-index:99; }
+        .sidebar .nav-link { color: #b8c2cc; padding: 12px 20px; border-left: 3px solid transparent; transition: all .2s; }
+        .sidebar .nav-link:hover, .sidebar .nav-link.active { color: #fff; background: rgba(255,255,255,0.08); border-left-color: var(--wine-gold); }
+        .sidebar .nav-link i { margin-right: 10px; width: 20px; text-align: center; }
+        .main-content { margin-left: 240px; padding: 80px 24px 24px; }
+        .topbar { position: fixed; top: 0; left: 240px; right: 0; height: 60px; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; z-index: 100; }
+        .brand { position: fixed; top: 0; left: 0; width: 240px; height: 60px; background: var(--wine-red); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 600; z-index: 101; }
+        .brand i { margin-right: 8px; }
+        .stat-card { border: none; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .stat-card .icon-box { width: 56px; height: 56px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+        .role-badge { background: var(--wine-gold); color: #fff; padding: 2px 10px; border-radius: 12px; font-size: 12px; }
+        .table th { background: #f8f9fa; }
+    </style>
+</head>
+
+<!-- ===== 公共侧边栏+顶栏 ===== -->
+<div th:fragment="body(role, roleName, pageTitle)">
+<div class="brand"><i class="bi bi-cup-hot-fill"></i> 智能分酒后台</div>
+<div class="sidebar">
+    <nav class="nav flex-column">
+        <!-- 平台运营 -->
+        <a th:if="${role == 5}" class="nav-link" th:classappend="${pageTitle=='运营总览'}?'active'" th:href="@{/admin/page/dashboard}"><i class="bi bi-speedometer2"></i>运营总览</a>
+        <a th:if="${role == 5}" class="nav-link" th:classappend="${pageTitle=='酒吧管理'}?'active'" th:href="@{/admin/page/bars}"><i class="bi bi-shop"></i>酒吧管理</a>
+        <a th:if="${role == 5}" class="nav-link" th:classappend="${pageTitle=='分酒机管理'}?'active'" th:href="@{/admin/page/dispensers}"><i class="bi bi-cpu"></i>设备管理</a>
+        <a th:if="${role == 5}" class="nav-link" th:classappend="${pageTitle=='酒款管理'}?'active'" th:href="@{/admin/page/wines}"><i class="bi bi-droplet"></i>酒款管理</a>
+        <a th:if="${role == 5}" class="nav-link" th:classappend="${pageTitle=='供酒商管理'}?'active'" th:href="@{/admin/page/suppliers}"><i class="bi bi-truck"></i>供酒商管理</a>
+        <a th:if="${role == 5}" class="nav-link" th:classappend="${pageTitle=='用户管理'}?'active'" th:href="@{/admin/page/users}"><i class="bi bi-people"></i>用户管理</a>
+        <a th:if="${role == 5}" class="nav-link" th:classappend="${pageTitle=='订单流水'}?'active'" th:href="@{/admin/page/orders}"><i class="bi bi-receipt"></i>全局订单</a>
+        <a th:if="${role == 5}" class="nav-link" th:classappend="${pageTitle=='履约核对'}?'active'" th:href="@{/admin/page/reconcile}"><i class="bi bi-clipboard-check"></i>履约核对</a>
+        <a th:if="${role == 5}" class="nav-link" th:classappend="${pageTitle=='损耗审计'}?'active'" th:href="@{/admin/page/loss-audit}"><i class="bi bi-exclamation-triangle"></i>损耗审计</a>
+        <!-- 酒吧运营 -->
+        <a th:if="${role == 2}" class="nav-link" th:classappend="${pageTitle=='营业概览'}?'active'" th:href="@{/admin/page/dashboard}"><i class="bi bi-speedometer2"></i>营业概览</a>
+        <a th:if="${role == 2}" class="nav-link" th:classappend="${pageTitle=='分酒机管理'}?'active'" th:href="@{/admin/page/dispensers}"><i class="bi bi-cpu"></i>分酒机监控</a>
+        <a th:if="${role == 2}" class="nav-link" th:classappend="${pageTitle=='瓶位余量监控'}?'active'" th:href="@{/admin/page/slots}"><i class="bi bi-droplet-half"></i>瓶位余量</a>
+        <a th:if="${role == 2}" class="nav-link" th:classappend="${pageTitle=='换瓶SOP'}?'active'" th:href="@{/admin/page/change-bottle}"><i class="bi bi-arrow-repeat"></i>换瓶SOP</a>
+        <a th:if="${role == 2}" class="nav-link" th:classappend="${pageTitle=='订单流水'}?'active'" th:href="@{/admin/page/orders}"><i class="bi bi-receipt"></i>本店订单</a>
+        <!-- 供酒商 -->
+        <a th:if="${role == 6}" class="nav-link" th:classappend="${pageTitle=='供应概览'}?'active'" th:href="@{/admin/page/dashboard}"><i class="bi bi-speedometer2"></i>供应概览</a>
+        <a th:if="${role == 6}" class="nav-link" th:classappend="${pageTitle=='酒款管理'}?'active'" th:href="@{/admin/page/wines}"><i class="bi bi-droplet"></i>我的酒款</a>
+        <a th:if="${role == 6}" class="nav-link" th:classappend="${pageTitle=='供酒记录'}?'active'" th:href="@{/admin/page/supplier-orders}"><i class="bi bi-truck"></i>供酒记录</a>
+    </nav>
+</div>
+<div class="topbar">
+    <div><span class="role-badge" th:text="${roleName}">角色</span><span class="ms-2 text-muted" th:text="${pageTitle}"></span></div>
+    <div class="d-flex align-items-center">
+        <span class="me-3" id="userNickname"></span>
+        <button class="btn btn-outline-danger btn-sm" onclick="logout()"><i class="bi bi-box-arrow-right"></i> 退出</button>
+    </div>
+</div>
+</div>
+
+<!-- ===== 公共脚本 ===== -->
+<script th:fragment="scripts">
+const API = '/api';
+function getToken() { return localStorage.getItem('token'); }
+function getRole() { return parseInt(localStorage.getItem('role') || '0'); }
+function getNickname() { return localStorage.getItem('nickname') || ''; }
+function authHeaders() { return { 'Content-Type':'application/json', 'Authorization':'Bearer ' + getToken() }; }
+async function apiGet(path) { const r = await fetch(API+path,{headers:{'Authorization':'Bearer '+getToken()}}); return await r.json(); }
+async function apiPost(path, body) { const opts = {method:'POST',headers:authHeaders()}; if (body !== undefined) opts.body = JSON.stringify(body); const r = await fetch(API+path,opts); return await r.json(); }
+async function apiPut(path, body) { const opts = {method:'PUT',headers:authHeaders()}; if (body !== undefined) opts.body = JSON.stringify(body); const r = await fetch(API+path,opts); return await r.json(); }
+async function apiDelete(path) { const r = await fetch(API+path,{method:'DELETE',headers:{'Authorization':'Bearer '+getToken()}}); return await r.json(); }
+function logout() { localStorage.clear(); document.cookie='token=; path=/api; expires=Thu, 01 Jan 1970 00:00:00 GMT'; window.location.href='/api/admin/page/login'; }
+function statusTag(code, map) { const info = map[code] || {text:code, cls:'secondary'}; return `<span class="badge bg-${info.cls}">${info.text}</span>`; }
+function fmtMoney(n) { return 'SGD ' + Number(n||0).toFixed(2); }
+document.getElementById('userNickname') && (document.getElementById('userNickname').textContent = getNickname());
+</script>

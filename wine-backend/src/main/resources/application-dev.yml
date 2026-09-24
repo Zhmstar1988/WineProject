@@ -1,0 +1,38 @@
+# ============================================================
+# 开发/测试环境配置 (SPRING_PROFILES_ACTIVE=dev)
+# 通联国际测试网关: https://test.allinpayhk.com/gateway
+# ============================================================
+
+# 通联国际 CNP - 测试环境（新加坡市场）
+allinpay-intl:
+  # 通联国际测试网关
+  base-url: ${ALLINPAY_INTL_BASE_URL:https://test.allinpayhk.com/gateway}
+  # 接入号（8位数字，通联国际分配，暂无则留空）
+  inst-no: ${ALLINPAY_INTL_INST_NO:}
+  # 商户号（15位，通联国际分配，暂无则用占位值，mock 模式下不实际调用）
+  mcht-id: ${ALLINPAY_INTL_MCHT_ID:MOCK_MCHT_ID_000}
+  # 接口版本固定 V2.0.0
+  version: V2.0.0
+  # 交易币种：新加坡元
+  currency: SGD
+  # 交易类型（具体取值以通联附录A为准，mock 模式可任意）
+  trans-type-purchase: ${ALLINPAY_INTL_TRANS_TYPE_PURCHASE:Purchase}
+  trans-type-query: ${ALLINPAY_INTL_TRANS_TYPE_QUERY:Query}
+  trans-type-refund: ${ALLINPAY_INTL_TRANS_TYPE_REFUND:Refund}
+  # 商户私钥（PKCS8 Base64）/ 通联公钥（X.509 Base64），由环境变量注入
+  private-key: ${ALLINPAY_INTL_PRIVATE_KEY:placeholder_private_key}
+  public-key: ${ALLINPAY_INTL_PUBLIC_KEY:placeholder_public_key}
+  # 异步通知地址（本地开发用 localhost，联调时需改为公网可达 HTTPS）
+  notify-url: ${ALLINPAY_INTL_NOTIFY_URL:http://localhost:8080/api/payment/notify}
+  # 前端支付完成回跳地址
+  return-url: ${ALLINPAY_INTL_RETURN_URL:http://localhost:8080/payment/result}
+  # 收银台风格：TINY（仅卡信息）/ DEFAULT
+  pay-page-style: TINY
+  # mock 模式：无真实商户号时使用，不实际调用通联接口
+  mock: ${ALLINPAY_INTL_MOCK:true}
+
+# 测试环境日志级别
+logging:
+  level:
+    com.wine: debug
+    org.springframework.security: info
