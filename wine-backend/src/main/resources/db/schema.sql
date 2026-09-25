@@ -266,3 +266,53 @@ CREATE TABLE IF NOT EXISTS bar_inventory (
     INDEX idx_bar_inventory_bar_id (bar_id),
     INDEX idx_bar_inventory_sku_id (wine_sku_id)
 );
+
+-- 13. 补货单表（酒商补货 + 到货验收）
+CREATE TABLE IF NOT EXISTS replenish_order (
+    id              BIGINT       NOT NULL,
+    order_no        VARCHAR(64)  NOT NULL COMMENT '补货单号',
+    bar_id          BIGINT       NOT NULL COMMENT '酒吧ID',
+    supplier_id     BIGINT       COMMENT '供应酒商ID',
+    wine_sku_id     BIGINT       NOT NULL COMMENT '酒款SKU',
+    quantity        INT          NOT NULL COMMENT '补货数量（整瓶）',
+    unit_price      DECIMAL(10,2) COMMENT '单价SGD',
+    total_amount    DECIMAL(10,2) COMMENT '总金额',
+    status          TINYINT      DEFAULT 0 COMMENT '0-待发货 1-已发货 2-已验收 3-已拒收',
+    shipped_time    DATETIME     COMMENT '发货时间',
+    received_time   DATETIME     COMMENT '验收时间',
+    received_qty    INT          COMMENT '实收数量',
+    reject_reason   VARCHAR(256) COMMENT '拒收原因',
+    remark          VARCHAR(256) COMMENT '备注',
+    create_time     DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    update_time     DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    create_by       BIGINT,
+    update_by       BIGINT,
+    deleted         TINYINT      DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE INDEX uk_replenish_order_no (order_no),
+    INDEX idx_replenish_bar_id (bar_id),
+    INDEX idx_replenish_supplier_id (supplier_id),
+    INDEX idx_replenish_status (status)
+);
+
+-- 14. 库存变动流水表（入库/出库/调整，用于追溯）
+CREATE TABLE IF NOT EXISTS inventory_log (
+    id              BIGINT       NOT NULL,
+    bar_id          BIGINT       NOT NULL COMMENT '酒吧ID',
+    wine_sku_id     BIGINT       NOT NULL COMMENT '酒款SKU',
+    change_type     TINYINT      NOT NULL COMMENT '1-入库(验收) 2-出库(换瓶) 3-手动调整 4-拒收冲正',
+    change_qty      INT          NOT NULL COMMENT '变动数量（正入库/负出库）',
+    before_qty      INT          COMMENT '变动前库存',
+    after_qty       INT          COMMENT '变动后库存',
+    ref_type        VARCHAR(32)  COMMENT '关联类型: replenish/change_bottle/manual',
+    ref_no          VARCHAR(64)  COMMENT '关联单号',
+    remark          VARCHAR(256) COMMENT '备注',
+    create_time     DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    update_time     DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    create_by       BIGINT,
+    update_by       BIGINT,
+    deleted         TINYINT      DEFAULT 0,
+    PRIMARY KEY (id),
+    INDEX idx_inventory_log_bar_sku (bar_id, wine_sku_id),
+    INDEX idx_inventory_log_ref (ref_type, ref_no)
+);

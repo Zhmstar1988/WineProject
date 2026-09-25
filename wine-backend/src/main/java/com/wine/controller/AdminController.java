@@ -5,9 +5,12 @@ import com.wine.common.Result;
 import com.wine.common.UserContextHolder;
 import com.wine.domain.*;
 import com.wine.dto.ChangeBottleReq;
+import com.wine.dto.ReplenishCreateReq;
+import com.wine.dto.ReplenishReceiveReq;
 import com.wine.mapper.*;
 import com.wine.service.BarOperationService;
 import com.wine.service.ReconcileService;
+import com.wine.service.ReplenishService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -54,6 +57,15 @@ public class AdminController {
 
     @Resource
     private WineSkuMapper wineSkuMapper;
+
+    @Resource
+    private ReplenishService replenishService;
+
+    @Resource
+    private ReplenishOrderMapper replenishOrderMapper;
+
+    @Resource
+    private InventoryLogMapper inventoryLogMapper;
 
     /** 酒吧列表（平台端） */
     @GetMapping("/bars")
@@ -307,5 +319,76 @@ public class AdminController {
         }
         qw.apply("quantity <= alert_threshold");
         return Result.success(barInventoryMapper.selectList(qw));
+    }
+
+    // ==================== 补货单 + 到货验收 ====================
+
+    /** 补货单列表（酒吧端看本店，平台端可指定 barId） */
+    @GetMapping("/replenish")
+    public Result<List<ReplenishOrder>> listReplenish(
+            @RequestParam(name = "barId", required = false) Long barId,
+            @RequestParam(name = "status", required = false) Integer status) {
+        Integer role = UserContextHolder.getRole();
+        LambdaQueryWrapper<ReplenishOrder> qw = new LambdaQueryWrapper<>();
+        if (role != null && role == 2) {
+            qw.eq(ReplenishOrder::getBarId, UserContextHolder.get().getBarId());
+        } else if (barId != null) {
+            qw.eq(ReplenishOrder::getBarId, barId);
+        }
+        if (status != null) qw.eq(ReplenishOrder::getStatus, status);
+        qw.orderByDesc(ReplenishOrder::getCreateTime);
+        return Result.success(replenishOrderMapper.selectList(qw));
+    }
+
+    /** 创建补货单（酒吧向酒商下单） */
+    @PostMapping("/replenish")
+    public Result<ReplenishOrder> createReplenish(@Valid @RequestBody ReplenishCreateReq req) {
+        // 酒吧端强制为本店
+        Integer role = UserContextHolder.getRole();
+        if (role != null && role == 2) {
+            req.setBarId(UserContextHolder.get().getBarId());
+        }
+        return Result.success(replenishService.createReplenish(req));
+    }
+
+    /** 酒商发货 */
+    @PostMapping("/replenish/{id}/ship")
+    public Result<ReplenishOrder> shipReplenish(@PathVariable Long id) {
+        return Result.success(replenishService.ship(id));
+    }
+
+    /** 到货验收：实收数量入库 + 写库存流水 */
+    @PostMapping("/replenish/{id}/receive")
+    public Result<ReplenishOrder> receiveReplenish(
+            @PathVariable Long id,
+            @Valid @RequestBody ReplenishReceiveReq req) {
+        return Result.success(replenishService.receive(id, req));
+    }
+
+    /** 拒收 */
+    @PostMapping("/replenish/{id}/reject")
+    public Result<ReplenishOrder> rejectReplenish(
+            @PathVariable Long id,
+            @RequestParam(name = "reason", required = false) String reason) {
+        return Result.success(replenishService.reject(id, reason));
+    }
+
+    // ==================== 库存变动流水 ====================
+
+    /** 库存变动流水列表 */
+    @GetMapping("/inventory/logs")
+    public Result<List<InventoryLog>> listInventoryLogs(
+            @RequestParam(name = "barId", required = false) Long barId,
+            @RequestParam(name = "wineSkuId", required = false) Long wineSkuId) {
+        Integer role = UserContextHolder.getRole();
+        LambdaQueryWrapper<InventoryLog> qw = new LambdaQueryWrapper<>();
+        if (role != null && role == 2) {
+            qw.eq(InventoryLog::getBarId, UserContextHolder.get().getBarId());
+        } else if (barId != null) {
+            qw.eq(InventoryLog::getBarId, barId);
+        }
+        if (wineSkuId != null) qw.eq(InventoryLog::getWineSkuId, wineSkuId);
+        qw.orderByDesc(InventoryLog::getCreateTime);
+        return Result.success(inventoryLogMapper.selectList(qw));
     }
 }
