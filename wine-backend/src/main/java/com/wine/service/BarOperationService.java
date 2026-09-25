@@ -140,16 +140,25 @@ public class BarOperationService {
         }
 
         int residual = item.getResidualMl() != null ? item.getResidualMl() : 0;
-        if (residual > 10) {
+        int systemCapacity = slot.getCurrentCapacity() != null ? slot.getCurrentCapacity() : 0;
+
+        // 损耗判断：系统记录余量 与 店员实测残留 的差异
+        // 差异 = |系统余量 - 实测残留|，超过阈值(50ml)才告警
+        // 主动换瓶(剩150ml就换)和用尽换瓶(剩5ml)都是正常操作，不算损耗
+        int diff = Math.abs(systemCapacity - residual);
+        int lossThreshold = 50; // 计量偏差容忍阈值 50ml
+        if (diff > lossThreshold) {
             LossAuditLog loss = new LossAuditLog();
             loss.setDispenserId(dispenserId);
             loss.setSlotNo(item.getSlotNo());
-            loss.setLossType(2);
-            loss.setTargetMl(10);
-            loss.setActualMl(residual);
-            loss.setLossMl(residual - 10);
-            loss.setRemark("换瓶残留量超过10ml合理损耗阈值，请确认异常原因");
+            loss.setLossType(2); // 换瓶损耗
+            loss.setTargetMl(lossThreshold);
+            loss.setActualMl(diff);
+            loss.setLossMl(diff - lossThreshold);
+            loss.setRemark("换瓶计量偏差超阈值：系统余量=" + systemCapacity + "ml，实测残留="
+                    + residual + "ml，偏差=" + diff + "ml，请核查是否有泄漏/偷酒/设备故障");
             lossAuditLogMapper.insert(loss);
+            slot.setNeedCalibration(true); // 标记需要校准
         }
 
         slot.setWineSkuId(item.getWineSkuId());
@@ -157,7 +166,9 @@ public class BarOperationService {
         slot.setCurrentCapacity(item.getInitialCapacity());
         slot.setBatchNo(item.getBatchNo());
         slot.setResidualMl(residual);
-        slot.setNeedCalibration(false);
+        if (diff <= lossThreshold) {
+            slot.setNeedCalibration(false);
+        }
 
         if (slot.getId() == null) {
             dispenserSlotMapper.insert(slot);
