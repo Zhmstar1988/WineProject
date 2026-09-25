@@ -37,6 +37,7 @@ jobs:
       - name: Build for iOS Simulator
         working-directory: wine-ios
         run: |
+          set -o pipefail
           xcodebuild \
             -project WineDispenser.xcodeproj \
             -scheme WineDispenser \
@@ -46,16 +47,6 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build 2>&1 | tee build.log
-
-      - name: Detect build errors
-        if: always()
-        working-directory: wine-ios
-        run: |
-          if grep -E "(error:|BUILD FAILED)" build.log; then
-            echo "::error::iOS build failed - see build.log for details"
-            exit 1
-          fi
-          echo "iOS build succeeded"
 
       - name: Upload build log
         if: always()
