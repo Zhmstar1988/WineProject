@@ -29,7 +29,7 @@ struct OrderConfirmView: View {
         NavigationStack {
             VStack(spacing: 20) {
                 Text(wine.wineName).font(.title2.bold())
-                Text("(cup.volumeName) - (cup.volumeMl)ml").font(.subheadline)
+                Text("\(cup.volumeName) - \(cup.volumeMl)ml").font(.subheadline)
                 Text("SGD (cup.price, specifier: "%.2f")").font(.title).foregroundColor(.red)
 
                 Spacer()
