@@ -29,8 +29,8 @@ struct OrderConfirmView: View {
         NavigationStack {
             VStack(spacing: 20) {
                 Text(wine.wineName).font(.title2.bold())
-                Text("\(cup.volumeName) - \(cup.volumeMl)ml").font(.subheadline)
-                Text("SGD \(cup.price, specifier: "%.2f")").font(.title).foregroundColor(.red)
+                Text("(cup.volumeName) - (cup.volumeMl)ml").font(.subheadline)
+                Text("SGD (cup.price, specifier: "%.2f")").font(.title).foregroundColor(.red)
 
                 Spacer()
 
@@ -46,7 +46,7 @@ struct OrderConfirmView: View {
                     } else {
                         Text("（mock 模式）正在等待通联异步回调").font(.caption).foregroundColor(.secondary)
                     }
-                    if cashierLoading, let url = order?.cashierUrl, !url.isEmpty {
+                    if cashierLoading, let urlStr = order?.cashierUrl, !urlStr.isEmpty, let url = URL(string: urlStr) {
                         Button("重新打开收银台") { Task { await openCashier(url: url) } }
                     }
 
@@ -54,11 +54,11 @@ struct OrderConfirmView: View {
                     VStack(spacing: 16) {
                         Image(systemName: "cup.and.saucer.fill")
                             .font(.system(size: 64)).foregroundColor(.blue)
-                        Text("请将酒杯放置于 \(cup.slotNo ?? 0) 号出酒口下方")
+                        Text("请将酒杯放置于 (cup.slotNo ?? 0) 号出酒口下方")
                             .font(.headline)
                         Toggle("我已放好酒杯", isOn: $cupPlaced)
                         if cupPlaced {
-                            Text(countdown > 0 ? "\(countdown)" : "可以出酒")
+                            Text(countdown > 0 ? "(countdown)" : "可以出酒")
                                 .font(.system(size: 48, weight: .bold))
                                 .foregroundColor(countdown > 0 ? .orange : .green)
                             Button("开始出酒") {
@@ -119,7 +119,7 @@ struct OrderConfirmView: View {
             order = created
             // 2. 调起支付，拿到通联收银台 URL
             let paid: OrderResponse = try await APIClient.shared.request(
-                "/payment/pay/\(created.orderNo)", method: "POST", token: authVM.token
+                "/payment/pay/(created.orderNo)", method: "POST", token: authVM.token
             )
             order = paid
             phase = .paying
@@ -158,7 +158,7 @@ struct OrderConfirmView: View {
             try await Task.sleep(nanoseconds: 2_000_000_000)
             do {
                 let latest: OrderResponse = try await APIClient.shared.request(
-                    "/order/\(orderNo)", method: "GET", token: authVM.token
+                    "/order/(orderNo)", method: "GET", token: authVM.token
                 )
                 order = latest
                 if latest.status >= OrderStatus.paid {
@@ -181,7 +181,7 @@ struct OrderConfirmView: View {
         guard let orderNo = order?.orderNo else { return }
         do {
             phase = .dispensing
-            try await APIClient.shared.requestVoid("/dispense/start/\(orderNo)", token: authVM.token)
+            try await APIClient.shared.requestVoid("/dispense/start/(orderNo)", token: authVM.token)
             // 模拟分酒机回调（真机由设备回传）
             try await Task.sleep(nanoseconds: 1_500_000_000)
             let body: [String: Any] = ["order_id": orderNo, "status": "SUCCESS", "actual_ml": cup.volumeMl]
