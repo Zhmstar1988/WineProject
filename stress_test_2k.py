@@ -33,6 +33,9 @@ SLOTS = [
     (1002, 3002, 2, 2002),
 ]
 VOLUMES = [50, 150]  # 杯量
+MAX_RETRY = 2          # 瓶位繁忙最大重试次数（共3次尝试）
+RETRY_BASE_MS = 300    # 重试基础延迟(指数退避: 300ms, 600ms)
+RETRY_JITTER_MS = 150  # 随机抖动，避免重试雪崩
 
 # ============ 初始化 ============
 http = urllib3.PoolManager(
@@ -100,47 +103,53 @@ def process_order(order_idx):
     paid_amount = None
     phases_ok = []
 
-    # Phase 1: 下单
+    # Phase 1: 下单（带瓶位繁忙指数退避重试）
     t0 = time.time()
-    try:
-        body = {
-            "barId": bar_id,
-            "dispenserId": dispenser_id,
-            "slotNo": slot_no,
-            "wineSkuId": wine_sku_id,
-            "volumeMl": volume,
-        }
-        # 幂等键
-        idem_key = f"stress-{order_idx}-{int(time.time()*1000)}"
-        status, text = api_post("/order/create", body, token, idem_key=idem_key)
-        dt = int((time.time() - t0) * 1000)
-        with stats_lock:
-            stats["phase_latency"]["create"].append(dt)
+    create_body = {
+        "barId": bar_id,
+        "dispenserId": dispenser_id,
+        "slotNo": slot_no,
+        "wineSkuId": wine_sku_id,
+        "volumeMl": volume,
+    }
+    for attempt in range(MAX_RETRY + 1):
+        idem_key = f"stress-{order_idx}-{attempt}-{int(time.time()*1000)}"
+        try:
+            status, text = api_post("/order/create", create_body, token, idem_key=idem_key)
+        except Exception as e:
+            with stats_lock:
+                stats["phase_fail"]["create_ex"] += 1
+                stats["errors"][f"EX:{type(e).__name__}:{str(e)[:120]}"] += 1
+            return False
+
         if status == 200:
             data = json.loads(text)
-            if data.get("code") != 200 or data.get("data") is None:
-                with stats_lock:
-                    stats["phase_fail"]["create_biz"] += 1
-                    stats["errors"][f"BIZ:{data.get('code')}:{str(data.get('message',''))[:100]}"] += 1
-                return False
-            order_no = data["data"].get("orderNo")
-            paid_amount = data["data"].get("paidAmount")
-            if order_no:
-                phases_ok.append("create")
-            else:
-                with stats_lock:
-                    stats["phase_fail"]["create_no_order"] += 1
-                    stats["errors"][text[:100]] += 1
-                return False
+            if data.get("code") == 200 and data.get("data") is not None:
+                order_no = data["data"].get("orderNo")
+                paid_amount = data["data"].get("paidAmount")
+                break
+            # 业务错误：瓶位繁忙则重试，其他错误直接失败
+            msg = str(data.get("message", ""))
+            if "繁忙" in msg and attempt < MAX_RETRY:
+                wait_ms = RETRY_BASE_MS * (2 ** attempt) + random.randint(0, RETRY_JITTER_MS)
+                time.sleep(wait_ms / 1000.0)
+                continue
+            with stats_lock:
+                stats["phase_fail"]["create_biz"] += 1
+                stats["errors"][f"BIZ:{data.get('code')}:{msg[:100]}"] += 1
+            return False
         else:
             with stats_lock:
                 stats["phase_fail"]["create"] += 1
                 stats["errors"][f"HTTP_{status}:{text[:80]}"] += 1
             return False
-    except Exception as e:
+
+    dt = int((time.time() - t0) * 1000)
+    with stats_lock:
+        stats["phase_latency"]["create"].append(dt)
+    if not order_no:
         with stats_lock:
-            stats["phase_fail"]["create_ex"] += 1
-            stats["errors"][f"EX:{type(e).__name__}:{str(e)[:120]}"] += 1
+            stats["phase_fail"]["create_no_order"] += 1
         return False
 
     # Phase 2: 支付

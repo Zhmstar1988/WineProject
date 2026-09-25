@@ -1,66 +1,59 @@
 {
   "summary": {
     "total_orders": 2000,
-    "success": 1986,
-    "failed": 14,
-    "success_rate": 99.3,
-    "total_time_sec": 13.12,
-    "throughput_rps": 152.42,
+    "success": 2000,
+    "failed": 0,
+    "success_rate": 100.0,
+    "total_time_sec": 13.36,
+    "throughput_rps": 149.7,
     "concurrency": 200,
     "volume_distribution": {
-      "150": 994,
-      "50": 992
+      "150": 1004,
+      "50": 996
     }
   },
-  "phase_failures": {
-    "create_biz": 14
-  },
+  "phase_failures": {},
   "phase_latency_ms": {
     "create": {
       "count": 2000,
-      "avg": 1148.65,
-      "p50": 94.0,
-      "p95": 11990,
-      "p99": 12540,
-      "max": 12998
+      "avg": 1144.28,
+      "p50": 114.5,
+      "p95": 12482,
+      "p99": 13037,
+      "max": 13297
     },
     "pay": {
-      "count": 1986,
-      "avg": 23.28,
-      "p50": 23.0,
-      "p95": 30,
-      "p99": 36,
-      "max": 58
+      "count": 2000,
+      "avg": 42.0,
+      "p50": 42.0,
+      "p95": 53,
+      "p99": 58,
+      "max": 112
     },
     "notify": {
-      "count": 1986,
-      "avg": 13.35,
-      "p50": 13.0,
-      "p95": 18,
-      "p99": 21,
-      "max": 53
+      "count": 2000,
+      "avg": 26.74,
+      "p50": 26.0,
+      "p95": 37,
+      "p99": 42,
+      "max": 95
     },
     "dispense_start": {
-      "count": 1986,
-      "avg": 13.3,
-      "p50": 13.0,
-      "p95": 18,
-      "p99": 21,
-      "max": 60
+      "count": 2000,
+      "avg": 23.5,
+      "p50": 23.0,
+      "p95": 31,
+      "p99": 35,
+      "max": 84
     },
     "dispense_callback": {
-      "count": 1986,
-      "avg": 15.24,
-      "p50": 15.0,
-      "p95": 20,
-      "p99": 25,
-      "max": 53
+      "count": 2000,
+      "avg": 26.66,
+      "p50": 26.5,
+      "p95": 34,
+      "p99": 38,
+      "max": 87
     }
   },
-  "top_errors": [
-    [
-      "BIZ:500:当前瓶位繁忙，请稍后重试",
-      14
-    ]
-  ]
+  "top_errors": []
 }

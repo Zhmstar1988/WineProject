@@ -183,10 +183,14 @@ public class OrderService {
                         .eq(BarWineMenu::getStatus, 1));
         if (menu == null) throw new BusinessException("酒单配置不存在或已下架");
 
-        // 3. Redis 分布式锁锁定瓶位，检查在机余量防超卖
+        // 3. 锁外预查酒吧（不依赖瓶位并发，提前到锁外减少锁持有时间）
+        Bar bar = barMapper.selectById(req.getBarId());
+
+        // 4. Redis 分布式锁锁定瓶位，检查在机余量防超卖
         String lockKey = slotLockPrefix + req.getDispenserId() + ":" + req.getSlotNo();
         String lockValue = UUID.randomUUID().toString();
         boolean locked = false;
+        OrderMain order = null;
         try {
             locked = redisLock.lockWithTimeout(lockKey, lockValue, 3000, 15);
             if (!locked) throw new BusinessException("当前瓶位繁忙，请稍后重试");
@@ -204,8 +208,8 @@ public class OrderService {
                 throw new BusinessException("该酒款余量不足");
             }
 
-            // 4. 创建订单（后端计价）
-            OrderMain order = new OrderMain();
+            // 创建订单（后端计价）—— 锁内只做最小必要操作：容量扣减 + 订单落库
+            order = new OrderMain();
             order.setOrderNo(generateOrderNo());
             order.setUserId(userId);
             order.setBarId(req.getBarId());
@@ -215,39 +219,34 @@ public class OrderService {
             order.setVolumeMl(req.getVolumeMl());
             order.setOriginalAmount(menu.getPrice());
             order.setDiscountAmount(BigDecimal.ZERO);
-            order.setPaidAmount(menu.getPrice()); // paid = original - discount
+            order.setPaidAmount(menu.getPrice());
             order.setStatus(OrderStatusEnum.PENDING.getCode());
             order.setPayStatus(PayStatusEnum.UNPAID.getCode());
             order.setPayExpireTime(LocalDateTime.now().plusMinutes(payTimeoutMinutes));
-
-            Bar bar = barMapper.selectById(req.getBarId());
             if (bar != null) order.setCusid(bar.getCusid());
-
             orderMainMapper.insert(order);
 
             log.info("订单创建成功: orderNo={}, userId={}, slot={}:{}, volume={}ml, remain={}ml",
                     order.getOrderNo(), userId, req.getDispenserId(), req.getSlotNo(), req.getVolumeMl(),
                     slot.getCurrentCapacity() - req.getVolumeMl());
-
-            OrderResp resp = toResp(order);
-
-            // 5. 幂等性：写入 Redis 缓存
-            if (cacheKey != null) {
-                try {
-                    stringRedisTemplate.opsForValue().set(cacheKey, objectMapper.writeValueAsString(resp),
-                            IDEM_TTL_HOURS, TimeUnit.HOURS);
-                } catch (Exception e) {
-                    log.warn("幂等缓存写入失败: cacheKey={}", cacheKey, e);
-                }
-            }
-
-            return resp;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new BusinessException("系统繁忙，请重试");
         } finally {
             if (locked) redisLock.unlock(lockKey, lockValue);
         }
+
+        // 5. 锁外组装响应 + 写幂等缓存（不影响瓶位并发，移出锁外缩短持锁时间）
+        OrderResp resp = toResp(order);
+        if (cacheKey != null) {
+            try {
+                stringRedisTemplate.opsForValue().set(cacheKey, objectMapper.writeValueAsString(resp),
+                        IDEM_TTL_HOURS, TimeUnit.HOURS);
+            } catch (Exception e) {
+                log.warn("幂等缓存写入失败: cacheKey={}", cacheKey, e);
+            }
+        }
+        return resp;
     }
 
     /**
