@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.wine.common.Result;
 import com.wine.common.UserContextHolder;
 import com.wine.domain.*;
+import com.wine.dto.BatchChangeBottleReq;
 import com.wine.dto.ChangeBottleReq;
 import com.wine.dto.ReplenishCreateReq;
 import com.wine.dto.ReplenishReceiveReq;
@@ -156,10 +157,17 @@ public class AdminController {
         return Result.success(orderMainMapper.selectList(qw));
     }
 
-    /** 标准换瓶 SOP */
+    /** 标准换瓶 SOP（单瓶位） */
     @PostMapping("/change-bottle")
     public Result<Void> changeBottle(@Valid @RequestBody ChangeBottleReq req) {
         barOperationService.changeBottle(req);
+        return Result.success();
+    }
+
+    /** 批量换瓶（一次给多个瓶位同时换瓶，按酒款聚合扣减后备库存） */
+    @PostMapping("/change-bottle/batch")
+    public Result<Void> batchChangeBottle(@Valid @RequestBody BatchChangeBottleReq req) {
+        barOperationService.batchChangeBottle(req);
         return Result.success();
     }
 
