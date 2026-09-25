@@ -46,7 +46,7 @@ struct OrderConfirmView: View {
                     } else {
                         Text("（mock 模式）正在等待通联异步回调").font(.caption).foregroundColor(.secondary)
                     }
-                    if cashierLoading, let url = order?.cashierUrl, !url.isEmpty {
+                    if cashierLoading, let urlStr = order?.cashierUrl, !urlStr.isEmpty, let url = URL(string: urlStr) {
                         Button("重新打开收银台") { Task { await openCashier(url: url) } }
                     }
 
