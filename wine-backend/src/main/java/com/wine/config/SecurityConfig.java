@@ -46,6 +46,7 @@ public class SecurityConfig {
                     "/payment/notify",
                     "/dispense/callback",
                     "/dispenser/callback",
+                    "/api/dispenser/*/heartbeat",
                     "/admin/page/login",
                     "/admin/static/**",
                     "/h2-console/**",

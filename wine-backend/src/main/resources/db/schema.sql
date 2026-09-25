@@ -247,3 +247,22 @@ CREATE TABLE IF NOT EXISTS sms_otp_log (
     PRIMARY KEY (id),
     INDEX idx_sms_otp_log_phone (phone)
 );
+
+-- 12. 酒吧后备库存表（实物整瓶库存）
+CREATE TABLE IF NOT EXISTS bar_inventory (
+    id              BIGINT       NOT NULL,
+    bar_id          BIGINT       NOT NULL COMMENT '酒吧ID',
+    wine_sku_id     BIGINT       NOT NULL COMMENT '酒款SKU',
+    quantity        INT          DEFAULT 0 COMMENT '库存数量（整瓶）',
+    alert_threshold INT          DEFAULT 0 COMMENT '预警阈值',
+    location        VARCHAR(128) COMMENT '存放位置',
+    status          TINYINT      DEFAULT 1 COMMENT '1-正常 0-停用',
+    create_time     DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    update_time     DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    create_by       BIGINT,
+    update_by       BIGINT,
+    deleted         TINYINT      DEFAULT 0,
+    PRIMARY KEY (id),
+    INDEX idx_bar_inventory_bar_id (bar_id),
+    INDEX idx_bar_inventory_sku_id (wine_sku_id)
+);

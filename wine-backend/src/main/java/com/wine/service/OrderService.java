@@ -2,11 +2,13 @@ package com.wine.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.wine.client.AllinpayIntlClient;
 import com.wine.common.BusinessException;
 import com.wine.common.RedisDistributedLock;
 import com.wine.domain.*;
 import com.wine.dto.CreateOrderReq;
 import com.wine.dto.OrderResp;
+import com.wine.enums.DispenseTicketStatusEnum;
 import com.wine.enums.OrderStatusEnum;
 import com.wine.enums.PayStatusEnum;
 import com.wine.mapper.*;
@@ -22,6 +24,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -60,8 +63,17 @@ public class OrderService {
     @Resource
     private ObjectMapper objectMapper;
 
+    @Resource
+    private AllinpayIntlClient allinpayIntlClient;
+
+    @Resource
+    private DispenseTicketMapper dispenseTicketMapper;
+
     @Value("${wine.order.pay-timeout-minutes:15}")
     private int payTimeoutMinutes;
+
+    @Value("${wine.order.paying-poll-minutes:10}")
+    private int payingPollMinutes;
 
     @Value("${wine.lock.in-machine-prefix:wine:lock:slot:}")
     private String slotLockPrefix;
@@ -305,5 +317,65 @@ public class OrderService {
             log.info("关闭超时未支付订单: count={}", count);
         }
         return count;
+    }
+
+    /**
+     * 兜底轮询 PAYING 状态订单
+     * 通联异步回调可能延时/丢失，定时扫描 PAYING 超过阈值的订单，主动调 queryOrder 核实真实支付状态。
+     * - resultCode=SUCCESS → 订单转 PAID，生成履约单
+     * - 其他 → 回退 PENDING，允许用户重新支付
+     */
+    @Transactional
+    public int pollPayingOrders() {
+        LocalDateTime threshold = LocalDateTime.now().minusMinutes(payingPollMinutes);
+        List<OrderMain> payingOrders = orderMainMapper.selectList(
+                new LambdaQueryWrapper<OrderMain>()
+                        .eq(OrderMain::getStatus, OrderStatusEnum.PAYING.getCode())
+                        .lt(OrderMain::getCreateTime, threshold));
+        if (payingOrders.isEmpty()) {
+            return 0;
+        }
+        log.info("PAYING 兜底轮询: 扫描到{}笔超时订单", payingOrders.size());
+        int paidCount = 0;
+        int pendingCount = 0;
+        for (OrderMain order : payingOrders) {
+            try {
+                Map<String, String> result = allinpayIntlClient.queryOrder(order.getOrderNo());
+                String resultCode = result.get("resultCode");
+                if ("SUCCESS".equals(resultCode) || "0000".equals(resultCode)) {
+                    // 支付成功：转 PAID + 生成履约单
+                    order.setStatus(OrderStatusEnum.PAID.getCode());
+                    order.setPayStatus(PayStatusEnum.SUCCESS.getCode());
+                    order.setTransactionId(result.getOrDefault("transId", order.getOrderNo()));
+                    order.setPayTime(LocalDateTime.now());
+                    orderMainMapper.updateById(order);
+
+                    DispenseTicket ticket = new DispenseTicket();
+                    ticket.setOrderNo(order.getOrderNo());
+                    ticket.setOrderId(order.getId());
+                    ticket.setUserId(order.getUserId());
+                    ticket.setDispenserId(order.getDispenserId());
+                    ticket.setSlotNo(order.getSlotNo());
+                    ticket.setTargetMl(order.getVolumeMl());
+                    ticket.setStatus(DispenseTicketStatusEnum.READY.getCode());
+                    ticket.setCupPresent(false);
+                    dispenseTicketMapper.insert(ticket);
+                    paidCount++;
+                    log.info("兜底轮询确认支付成功: orderNo={}", order.getOrderNo());
+                } else {
+                    // 未支付：回退 PENDING
+                    order.setStatus(OrderStatusEnum.PENDING.getCode());
+                    order.setPayStatus(PayStatusEnum.FAILED.getCode());
+                    order.setRemark("兜底轮询确认未支付，回退待支付");
+                    orderMainMapper.updateById(order);
+                    pendingCount++;
+                    log.info("兜底轮询确认未支付: orderNo={}, resultCode={}", order.getOrderNo(), resultCode);
+                }
+            } catch (Exception e) {
+                log.warn("兜底轮询查询异常: orderNo={}, msg={}", order.getOrderNo(), e.getMessage());
+            }
+        }
+        log.info("PAYING 兜底轮询完成: 成功{}笔, 回退{}笔", paidCount, pendingCount);
+        return paidCount + pendingCount;
     }
 }

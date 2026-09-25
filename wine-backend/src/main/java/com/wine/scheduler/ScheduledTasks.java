@@ -52,4 +52,20 @@ public class ScheduledTasks {
             log.error("超时订单关闭任务异常", e);
         }
     }
+
+    /**
+     * PAYING 状态兜底轮询（每5分钟）
+     * 通联异步回调可能延时/丢失，主动调 queryOrder 核实真实支付状态
+     */
+    @Scheduled(cron = "0 */5 * * * ?")
+    public void pollPayingOrders() {
+        try {
+            int count = orderService.pollPayingOrders();
+            if (count > 0) {
+                log.info("PAYING 兜底轮询任务完成: 处理{}笔", count);
+            }
+        } catch (Exception e) {
+            log.error("PAYING 兜底轮询任务异常", e);
+        }
+    }
 }
