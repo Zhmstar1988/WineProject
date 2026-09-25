@@ -1,0 +1,66 @@
+{
+  "summary": {
+    "total_orders": 2000,
+    "success": 1986,
+    "failed": 14,
+    "success_rate": 99.3,
+    "total_time_sec": 13.12,
+    "throughput_rps": 152.42,
+    "concurrency": 200,
+    "volume_distribution": {
+      "150": 994,
+      "50": 992
+    }
+  },
+  "phase_failures": {
+    "create_biz": 14
+  },
+  "phase_latency_ms": {
+    "create": {
+      "count": 2000,
+      "avg": 1148.65,
+      "p50": 94.0,
+      "p95": 11990,
+      "p99": 12540,
+      "max": 12998
+    },
+    "pay": {
+      "count": 1986,
+      "avg": 23.28,
+      "p50": 23.0,
+      "p95": 30,
+      "p99": 36,
+      "max": 58
+    },
+    "notify": {
+      "count": 1986,
+      "avg": 13.35,
+      "p50": 13.0,
+      "p95": 18,
+      "p99": 21,
+      "max": 53
+    },
+    "dispense_start": {
+      "count": 1986,
+      "avg": 13.3,
+      "p50": 13.0,
+      "p95": 18,
+      "p99": 21,
+      "max": 60
+    },
+    "dispense_callback": {
+      "count": 1986,
+      "avg": 15.24,
+      "p50": 15.0,
+      "p95": 20,
+      "p99": 25,
+      "max": 53
+    }
+  },
+  "top_errors": [
+    [
+      "BIZ:500:当前瓶位繁忙，请稍后重试",
+      14
+    ]
+  ]
+}

@@ -173,11 +173,17 @@ public class PaymentService {
 
             log.info("支付成功，生成履约单: orderNo={}", orderNo);
         } else {
-            // 支付失败：订单回退 PENDING，允许重新发起
+            // 支付失败：订单回退 PENDING，允许重新发起，同时立即返还预占容量
             order.setStatus(OrderStatusEnum.PENDING.getCode());
             order.setPayStatus(PayStatusEnum.FAILED.getCode());
             orderMainMapper.updateById(order);
-            log.info("支付失败: orderNo={}, resultCode={}", orderNo, resultCode);
+            // 立即返还下单时预占的在机容量（避免等到超时定时任务才释放）
+            try {
+                restoreCapacity(order.getDispenserId(), order.getSlotNo(), order.getVolumeMl());
+            } catch (Exception e) {
+                log.warn("支付失败返还容量异常: orderNo={}", orderNo, e);
+            }
+            log.info("支付失败，已返还预占容量: orderNo={}, resultCode={}", orderNo, resultCode);
         }
         return "success";
     }
