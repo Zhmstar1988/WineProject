@@ -43,6 +43,9 @@ public class DispenseService {
     @Resource
     private RedisDistributedLock redisLock;
 
+    @Resource
+    private PaymentService paymentService;
+
     @Value("${wine.lock.in-machine-prefix:wine:lock:slot:}")
     private String slotLockPrefix;
 
@@ -126,8 +129,7 @@ public class DispenseService {
             order.setCompleteTime(LocalDateTime.now());
             orderMainMapper.updateById(order);
 
-            // 扣减在机物理余量（加锁保证原子性）
-            deductCapacity(ticket.getDispenserId(), ticket.getSlotNo(), ticket.getTargetMl());
+            // 容量已在下单时预留扣减，出酒成功无需再次扣减
 
             log.info("出酒成功: orderNo={}, actualMl={}", orderNo, actualMl);
         } else {
@@ -149,12 +151,8 @@ public class DispenseService {
             loss.setRemark("出酒不足，全额退款，差额记入损耗审计");
             lossAuditLogMapper.insert(loss);
 
-            // 驱动主订单退款
-            OrderMain order = orderMainMapper.selectById(ticket.getOrderId());
-            order.setStatus(OrderStatusEnum.REFUNDED.getCode());
-            order.setRefundTime(LocalDateTime.now());
-            order.setRefundNo("RF" + System.currentTimeMillis());
-            orderMainMapper.updateById(order);
+            // 驱动主订单原路全额退款（调用通联退款API，返还容量）
+            paymentService.refund(orderNo);
 
             log.warn("出酒失败，自动退款: orderNo={}, actualMl={}", orderNo, actualMl);
         }
@@ -174,10 +172,8 @@ public class DispenseService {
         ticket.setFailReason("用户主动取消");
         dispenseTicketMapper.updateById(ticket);
 
-        OrderMain order = orderMainMapper.selectById(ticket.getOrderId());
-        order.setStatus(OrderStatusEnum.REFUNDED.getCode());
-        order.setRefundTime(LocalDateTime.now());
-        orderMainMapper.updateById(order);
+        // 驱动主订单原路全额退款（调用通联退款API，返还容量）
+        paymentService.refund(orderNo);
     }
 
     private void deductCapacity(Long dispenserId, Integer slotNo, Integer ml) {
@@ -193,6 +189,29 @@ public class DispenseService {
                             .eq(DispenserSlot::getSlotNo, slotNo));
             if (slot != null) {
                 slot.setCurrentCapacity(Math.max(0, slot.getCurrentCapacity() - ml));
+                dispenserSlotMapper.updateById(slot);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            if (locked) redisLock.unlock(lockKey, lockValue);
+        }
+    }
+
+    /** 返还在机容量（退款/取消时调用） */
+    private void restoreCapacity(Long dispenserId, Integer slotNo, Integer ml) {
+        String lockKey = slotLockPrefix + dispenserId + ":" + slotNo;
+        String lockValue = UUID.randomUUID().toString();
+        boolean locked = false;
+        try {
+            locked = redisLock.lockWithTimeout(lockKey, lockValue, 3000, 10);
+            if (!locked) return;
+            DispenserSlot slot = dispenserSlotMapper.selectOne(
+                    new LambdaQueryWrapper<DispenserSlot>()
+                            .eq(DispenserSlot::getDispenserId, dispenserId)
+                            .eq(DispenserSlot::getSlotNo, slotNo));
+            if (slot != null && slot.getInitialCapacity() != null) {
+                slot.setCurrentCapacity(Math.min(slot.getInitialCapacity(), slot.getCurrentCapacity() + ml));
                 dispenserSlotMapper.updateById(slot);
             }
         } catch (InterruptedException e) {

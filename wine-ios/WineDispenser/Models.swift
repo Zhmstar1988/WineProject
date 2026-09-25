@@ -14,6 +14,7 @@ struct LoginResponse: Codable {
     let role: Int
     let ageVerified: Bool
     let nickname: String
+    let isNewUser: Bool?
 }
 
 // 酒单

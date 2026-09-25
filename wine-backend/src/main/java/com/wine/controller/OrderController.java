@@ -20,8 +20,9 @@ public class OrderController {
     private OrderService orderService;
 
     @PostMapping("/create")
-    public Result<OrderResp> create(@Valid @RequestBody CreateOrderReq req) {
-        return Result.success(orderService.createOrder(UserContextHolder.getUserId(), req));
+    public Result<OrderResp> create(@Valid @RequestBody CreateOrderReq req,
+                                    @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        return Result.success(orderService.createOrder(UserContextHolder.getUserId(), req, idempotencyKey));
     }
 
     @GetMapping("/{orderNo}")

@@ -1,6 +1,7 @@
 package com.wine.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wine.common.BusinessException;
 import com.wine.common.RedisDistributedLock;
 import com.wine.domain.*;
@@ -12,6 +13,7 @@ import com.wine.mapper.*;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +21,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 交易订单服务（线上资金结算域）
@@ -50,21 +54,106 @@ public class OrderService {
     @Resource
     private RedisDistributedLock redisLock;
 
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
+
+    @Resource
+    private ObjectMapper objectMapper;
+
     @Value("${wine.order.pay-timeout-minutes:15}")
     private int payTimeoutMinutes;
 
     @Value("${wine.lock.in-machine-prefix:wine:lock:slot:}")
     private String slotLockPrefix;
 
+    private static final String IDEM_PREFIX = "wine:idem:order:";
+    private static final long IDEM_TTL_HOURS = 24;
+
     /**
      * 下单
+     * 0. 幂等性校验（Idempotency-Key + Redis 锁）：相同 key 只创建一次订单
      * 1. 校验年龄合规
      * 2. Redis 锁瓶位，检查在机余量
      * 3. 后端统一计价（不信任端侧金额）
      * 4. 创建 PENDING 订单，设置支付超时
      */
     @Transactional
-    public OrderResp createOrder(Long userId, CreateOrderReq req) {
+    public OrderResp createOrder(Long userId, CreateOrderReq req, String idempotencyKey) {
+        // 无幂等键：直接创建订单
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return doCreateOrder(userId, req, null);
+        }
+
+        // 有幂等键：先查缓存
+        String cacheKey = IDEM_PREFIX + idempotencyKey;
+        OrderResp cached = getIdemCache(cacheKey);
+        if (cached != null) {
+            log.info("幂等命中(缓存): idempotencyKey={}, orderNo={}", idempotencyKey, cached.getOrderNo());
+            return cached;
+        }
+
+        // 尝试获取幂等锁，确保同一 key 只有一个请求创建订单
+        String idemLockKey = "idem:" + idempotencyKey;
+        String idemLockValue = UUID.randomUUID().toString();
+        boolean idemLocked = redisLock.tryLock(idemLockKey, idemLockValue, 30);
+
+        if (idemLocked) {
+            try {
+                // 双重检查：获取锁后再次查缓存
+                cached = getIdemCache(cacheKey);
+                if (cached != null) {
+                    log.info("幂等命中(锁内二次检查): idempotencyKey={}, orderNo={}", idempotencyKey, cached.getOrderNo());
+                    return cached;
+                }
+                // 创建订单并缓存结果
+                OrderResp resp = doCreateOrder(userId, req, cacheKey);
+                return resp;
+            } finally {
+                redisLock.unlock(idemLockKey, idemLockValue);
+            }
+        } else {
+            // 未获取到锁：等待其他请求完成并写入缓存，轮询读取
+            return waitForIdemCache(cacheKey, idempotencyKey);
+        }
+    }
+
+    /** 从 Redis 读取幂等缓存 */
+    private OrderResp getIdemCache(String cacheKey) {
+        try {
+            String cached = stringRedisTemplate.opsForValue().get(cacheKey);
+            if (cached != null) {
+                return objectMapper.readValue(cached, OrderResp.class);
+            }
+        } catch (Exception e) {
+            log.warn("幂等缓存读取失败: cacheKey={}", cacheKey, e);
+        }
+        return null;
+    }
+
+    /** 轮询等待幂等缓存写入（其他请求正在处理同一 key） */
+    private OrderResp waitForIdemCache(String cacheKey, String idempotencyKey) {
+        long deadline = System.currentTimeMillis() + 5000;
+        while (System.currentTimeMillis() < deadline) {
+            OrderResp cached = getIdemCache(cacheKey);
+            if (cached != null) {
+                log.info("幂等命中(等待后): idempotencyKey={}, orderNo={}", idempotencyKey, cached.getOrderNo());
+                return cached;
+            }
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new BusinessException("系统繁忙，请重试");
+            }
+        }
+        throw new BusinessException("系统繁忙，请稍后重试");
+    }
+
+    /**
+     * 实际创建订单（内部方法）
+     * @param cacheKey 幂等缓存 key，非空则创建后写入缓存
+     */
+    private OrderResp doCreateOrder(Long userId, CreateOrderReq req, String cacheKey) {
         // 1. 年龄合规校验
         SysUser user = sysUserMapper.selectById(userId);
         if (user == null) throw new BusinessException("用户不存在");
@@ -95,7 +184,11 @@ public class OrderService {
                             .eq(DispenserSlot::getDispenserId, req.getDispenserId())
                             .eq(DispenserSlot::getSlotNo, req.getSlotNo()));
             if (slot == null) throw new BusinessException("瓶位不存在");
-            if (slot.getCurrentCapacity() < req.getVolumeMl()) {
+
+            // 原子扣减在机容量（数据库行锁保证并发安全，防超卖）
+            int affected = dispenserSlotMapper.deductCapacity(
+                    req.getDispenserId(), req.getSlotNo(), req.getVolumeMl());
+            if (affected == 0) {
                 throw new BusinessException("该酒款余量不足");
             }
 
@@ -119,10 +212,24 @@ public class OrderService {
             if (bar != null) order.setCusid(bar.getCusid());
 
             orderMainMapper.insert(order);
-            log.info("订单创建成功: orderNo={}, userId={}, slot={}:{}, volume={}ml",
-                    order.getOrderNo(), userId, req.getDispenserId(), req.getSlotNo(), req.getVolumeMl());
 
-            return toResp(order);
+            log.info("订单创建成功: orderNo={}, userId={}, slot={}:{}, volume={}ml, remain={}ml",
+                    order.getOrderNo(), userId, req.getDispenserId(), req.getSlotNo(), req.getVolumeMl(),
+                    slot.getCurrentCapacity() - req.getVolumeMl());
+
+            OrderResp resp = toResp(order);
+
+            // 5. 幂等性：写入 Redis 缓存
+            if (cacheKey != null) {
+                try {
+                    stringRedisTemplate.opsForValue().set(cacheKey, objectMapper.writeValueAsString(resp),
+                            IDEM_TTL_HOURS, TimeUnit.HOURS);
+                } catch (Exception e) {
+                    log.warn("幂等缓存写入失败: cacheKey={}", cacheKey, e);
+                }
+            }
+
+            return resp;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new BusinessException("系统繁忙，请重试");
@@ -168,6 +275,35 @@ public class OrderService {
 
     private String generateOrderNo() {
         return "ORD" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
-                + String.format("%06d", UUID.randomUUID().toString().hashCode() % 1000000);
+                + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+    }
+
+    /**
+     * 关闭支付超时的 PENDING 订单，返还预占容量
+     * 定时任务每分钟扫描
+     */
+    @Transactional
+    public int closeExpiredOrders() {
+        List<OrderMain> expired = orderMainMapper.selectList(
+                new LambdaQueryWrapper<OrderMain>()
+                        .eq(OrderMain::getStatus, OrderStatusEnum.PENDING.getCode())
+                        .lt(OrderMain::getPayExpireTime, LocalDateTime.now()));
+        int count = 0;
+        for (OrderMain order : expired) {
+            order.setStatus(OrderStatusEnum.REFUNDED.getCode());
+            order.setRemark("支付超时自动关闭");
+            orderMainMapper.updateById(order);
+            // 返还预占容量
+            try {
+                dispenserSlotMapper.restoreCapacity(order.getDispenserId(), order.getSlotNo(), order.getVolumeMl());
+            } catch (Exception e) {
+                log.warn("返还容量失败: orderNo={}", order.getOrderNo(), e);
+            }
+            count++;
+        }
+        if (count > 0) {
+            log.info("关闭超时未支付订单: count={}", count);
+        }
+        return count;
     }
 }

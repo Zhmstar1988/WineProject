@@ -124,13 +124,18 @@ public class AllinpayIntlClient {
      * <p>
      * 持卡人在通联收银台页面输入卡号/有效期/CVV，由通联完成 3DS 2.0 鉴权与授权。
      * 商户侧不触碰任何卡数据 → 满足 PCI DSS 合规。
+     * <p>
+     * 资金中立分账：通过 asinfo 指令将资金直接清算至酒吧子商户(cusid)，
+     * 平台不归集资金，规避"二清"合规风险。
+     * asinfo 格式：cusid:01:paid_amount （01=分账类型，金额单位为元）
      *
      * @param accessOrderId 商户订单号
+     * @param cusid         酒吧通联子商户号（分账收款方）
      * @param amount        金额（元，如 18.00）
      * @param subject       订单标题
      * @return 通联收银台 payUrl，前端跳转该地址完成支付
      */
-    public String createOrder(String accessOrderId, BigDecimal amount, String subject) {
+    public String createOrder(String accessOrderId, String cusid, BigDecimal amount, String subject) {
         if (config.isMock()) {
             return mockPayUrl(accessOrderId);
         }
@@ -148,10 +153,15 @@ public class AllinpayIntlClient {
         params.put("subject", subject);
         params.put("payPageStyle", config.getPayPageStyle());
         params.put("signType", "RSA2");
+        // 资金中立分账指令：cusid:01:paid_amount，资金 T+1 清算至酒吧子商户
+        if (cusid != null && !cusid.isEmpty()) {
+            String asinfo = cusid + ":01:" + amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
+            params.put("asinfo", asinfo);
+        }
         params.put("sign", sign(params));
 
-        log.info("通联国际下单请求: accessOrderId={}, amount={} {}, currency={}, transType={}",
-                accessOrderId, params.get("amount"), config.getCurrency(), config.getTransTypePurchase());
+        log.info("通联国际下单请求: accessOrderId={}, cusid={}, amount={} {}, asinfo={}",
+                accessOrderId, cusid, params.get("amount"), config.getCurrency(), params.get("asinfo"));
 
         String resp = postForm(config.getBaseUrl() + "/cnp/quickpay", params);
         Map<String, String> result = parseJson(resp);

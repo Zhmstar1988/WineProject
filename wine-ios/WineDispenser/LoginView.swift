@@ -28,12 +28,16 @@ struct LoginView: View {
                     TextField("手机号 (+65...)", text: $phone)
                         .textFieldStyle(.roundedBorder)
                         .keyboardType(.phonePad)
+                        .submitLabel(.done)
+                        .onSubmit { } // 屏蔽回车键默认提交行为
 
                     if showingCode {
                         HStack {
                             TextField("验证码", text: $code)
                                 .textFieldStyle(.roundedBorder)
                                 .keyboardType(.numberPad)
+                                .submitLabel(.done)
+                                .onSubmit { } // 屏蔽回车键默认提交行为
                             Button("登录") {
                                 Task { await doLogin() }
                             }
@@ -56,6 +60,12 @@ struct LoginView: View {
                 }
                 .frame(height: 44)
                 .padding(.horizontal)
+
+                if authVM.isNewUser {
+                    Text("欢迎注册！请完成年龄校验后开始点单")
+                        .foregroundColor(.blue)
+                        .font(.caption)
+                }
 
                 if !errorMsg.isEmpty {
                     Text(errorMsg).foregroundColor(.red).font(.caption)

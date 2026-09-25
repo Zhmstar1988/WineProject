@@ -120,6 +120,13 @@
             <version>${hutool.version}</version>
         </dependency>
 
+        <!-- Twilio 国际短信 -->
+        <dependency>
+            <groupId>com.twilio.sdk</groupId>
+            <artifactId>twilio</artifactId>
+            <version>10.4.0</version>
+        </dependency>
+
         <!-- Knife4j (OpenAPI / Swagger) -->
         <dependency>
             <groupId>com.github.xiaoymin</groupId>

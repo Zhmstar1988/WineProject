@@ -14,7 +14,7 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:winedb}?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Singapore&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
     username: ${MYSQL_USERNAME:root}
-    password: ${MYSQL_PASSWORD:}
+    password: ${MYSQL_PASSWORD:root}
     hikari:
       maximum-pool-size: 20
       minimum-idle: 5
@@ -70,7 +70,7 @@ mybatis-plus:
 
 # JWT 配置
 jwt:
-  secret: WineSingapore2026SecretKeyForJWTTokenGenerationMustBeLongEnough
+  secret: ${JWT_SECRET:WineSingaporeDevSecretKeyForJWTTokenGenerationMustBeLong}
   expiration: 604800000   # 7天
   header: Authorization
   prefix: "Bearer "
@@ -78,6 +78,30 @@ jwt:
 # 通联国际 CNP 配置（环境差异化配置见 application-dev.yml / application-prod.yml）
 # 切换方式：SPRING_PROFILES_ACTIVE=dev (测试) 或 prod (生产)
 # 敏感信息（mcht-id/private-key/public-key）统一由环境变量 ALLINPAY_INTL_* 注入
+
+# Twilio 国际短信与验证码（新加坡市场）
+# 两种验证码模式：
+#   Verify API（推荐生产）: 配置 verify-service-sid，Twilio 生成并下发验证码，
+#                          自动使用合规发送者 ID（如 TWVerify），无需自购号码、无需本地存验证码
+#   普通短信模式: 不配置 verify-service-sid，本地生成验证码 + sendSms 发送
+twilio:
+  # 开发阶段设为 false 使用 mock 模式（验证码入库，不真实发送）
+  enabled: ${TWILIO_ENABLED:true}
+  # Account SID（以 AC 开头）
+  account-sid: ${TWILIO_ACCOUNT_SID:}
+  # API Key SID（以 SK 开头，可选）
+  api-key-sid: ${TWILIO_API_KEY_SID:}
+  # API Key Secret
+  api-key-secret: ${TWILIO_API_KEY_SECRET:}
+  # Auth Token（与 API Key 二选一）
+  auth-token: ${TWILIO_AUTH_TOKEN:}
+  # 普通短信发信号码（Verify 模式下不需要）
+  from-number: ${TWILIO_FROM_NUMBER:+15005550006}
+  # 短信签名前缀（新加坡合规：避免酒类字样，使用中性名称）
+  prefix: "[SGVerify]"
+  # Verify Service SID（VA 开头）。配置后启用 Verify API；留空使用普通短信模式
+  # 创建：Twilio 控制台 -> Explore Products -> Verify -> Services -> Create new
+  verify-service-sid: ${TWILIO_VERIFY_SERVICE_SID:}
 
 # 分酒机 IoT 配置
 dispenser:

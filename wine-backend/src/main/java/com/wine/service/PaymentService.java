@@ -5,15 +5,19 @@ import com.wine.client.AllinpayIntlClient;
 import com.wine.common.BusinessException;
 import com.wine.config.AllinpayIntlConfig;
 import com.wine.domain.DispenseTicket;
+import com.wine.domain.DispenserSlot;
 import com.wine.domain.OrderMain;
 import com.wine.dto.OrderResp;
 import com.wine.enums.DispenseTicketStatusEnum;
 import com.wine.enums.OrderStatusEnum;
 import com.wine.enums.PayStatusEnum;
 import com.wine.mapper.DispenseTicketMapper;
+import com.wine.mapper.DispenserSlotMapper;
 import com.wine.mapper.OrderMainMapper;
+import com.wine.common.RedisDistributedLock;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +26,7 @@ import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * 通联国际（Allinpay International）支付服务
@@ -53,6 +58,15 @@ public class PaymentService {
     @Resource
     private AllinpayIntlConfig allinpayIntlConfig;
 
+    @Resource
+    private DispenserSlotMapper dispenserSlotMapper;
+
+    @Resource
+    private RedisDistributedLock redisLock;
+
+    @Value("${wine.lock.in-machine-prefix:wine:lock:slot:}")
+    private String slotLockPrefix;
+
     /**
      * 发起支付：调用通联国际 CNP 收银台（页面跳转模式）
      * 金额单位为元（通联国际规范），订单转 PAYING
@@ -68,8 +82,8 @@ public class PaymentService {
         BigDecimal amount = order.getPaidAmount().setScale(2, RoundingMode.HALF_UP);
         String subject = "葡萄酒按杯订单-" + orderNo;
 
-        // 调用通联国际 CNP 收银台下单
-        String cashierUrl = allinpayIntlClient.createOrder(orderNo, amount, subject);
+        // 调用通联国际 CNP 收银台下单（携带 cusid 分账指令）
+        String cashierUrl = allinpayIntlClient.createOrder(orderNo, order.getCusid(), amount, subject);
 
         order.setStatus(OrderStatusEnum.PAYING.getCode());
         orderMainMapper.updateById(order);
@@ -113,7 +127,13 @@ public class PaymentService {
             return "fail";
         }
 
-        // 2. 防篡改：核对回调金额与订单实付金额一致（单位：元）
+        // 2. 幂等：非 PAYING 状态说明已处理过，直接回 success（先于金额校验，避免重复回调因金额差异被拒）
+        if (order.getStatus() != OrderStatusEnum.PAYING.getCode()) {
+            log.info("通联国际回调幂等命中，订单已处理: orderNo={}, status={}", orderNo, order.getStatus());
+            return "success";
+        }
+
+        // 3. 防篡改：核对回调金额与订单实付金额一致（单位：元）
         if (notifyAmount != null && !notifyAmount.isEmpty()) {
             BigDecimal orderAmount = order.getPaidAmount().setScale(2, RoundingMode.HALF_UP);
             BigDecimal notifyAmt = new BigDecimal(notifyAmount).setScale(2, RoundingMode.HALF_UP);
@@ -124,18 +144,12 @@ public class PaymentService {
             }
         }
 
-        // 3. 防篡改：核对回调币种与配置币种一致
+        // 4. 防篡改：核对回调币种与配置币种一致
         if (notifyCurrency != null && !notifyCurrency.isEmpty()
                 && !notifyCurrency.equals(allinpayIntlConfig.getCurrency())) {
             log.warn("通联国际回调币种不匹配: orderNo={}, configCurrency={}, notifyCurrency={}",
                     orderNo, allinpayIntlConfig.getCurrency(), notifyCurrency);
             return "fail";
-        }
-
-        // 4. 幂等：非 PAYING 状态说明已处理过，直接回 success
-        if (order.getStatus() != OrderStatusEnum.PAYING.getCode()) {
-            log.info("通联国际回调幂等命中，订单已处理: orderNo={}, status={}", orderNo, order.getStatus());
-            return "success";
         }
 
         if (RESULT_SUCCESS.equals(resultCode)) {
@@ -195,8 +209,36 @@ public class PaymentService {
         order.setRefundTime(LocalDateTime.now());
         order.setRefundNo(refundOrderNo);
         orderMainMapper.updateById(order);
+
+        // 返还下单时预留的在机容量
+        restoreCapacity(order.getDispenserId(), order.getSlotNo(), order.getVolumeMl());
+
         log.info("退款成功: orderNo={}, refundOrderNo={}, amount={} {}",
                 orderNo, refundOrderNo, amount, allinpayIntlConfig.getCurrency());
+    }
+
+    /** 返还在机容量（退款时调用） */
+    private void restoreCapacity(Long dispenserId, Integer slotNo, Integer ml) {
+        if (dispenserId == null || slotNo == null || ml == null) return;
+        String lockKey = slotLockPrefix + dispenserId + ":" + slotNo;
+        String lockValue = UUID.randomUUID().toString();
+        boolean locked = false;
+        try {
+            locked = redisLock.lockWithTimeout(lockKey, lockValue, 3000, 10);
+            if (!locked) return;
+            DispenserSlot slot = dispenserSlotMapper.selectOne(
+                    new LambdaQueryWrapper<DispenserSlot>()
+                            .eq(DispenserSlot::getDispenserId, dispenserId)
+                            .eq(DispenserSlot::getSlotNo, slotNo));
+            if (slot != null && slot.getInitialCapacity() != null) {
+                slot.setCurrentCapacity(Math.min(slot.getInitialCapacity(), slot.getCurrentCapacity() + ml));
+                dispenserSlotMapper.updateById(slot);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            if (locked) redisLock.unlock(lockKey, lockValue);
+        }
     }
 
     private OrderMain getOrder(String orderNo) {

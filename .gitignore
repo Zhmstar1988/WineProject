@@ -1,4 +1,4 @@
-# Build artifacts
+﻿# Build artifacts
 wine-android/app/build/
 wine-android/.gradle/
 wine-android/build/
@@ -60,3 +60,18 @@ xcuserdata/
 
 # XcodeGen generated (we commit project.yml only)
 wine-ios/WineDispenser.xcodeproj/
+
+# Env files
+.env.allinpay.*
+*.env
+# Temp & test files
+*.log
+wine-backend/cp.txt
+wine-backend/login.json
+wine-backend/java-args.txt
+admin_tokens.json
+gen_users.*
+stress_test.py
+*_verify.ps1
+test_*.py
+android_screen*.png

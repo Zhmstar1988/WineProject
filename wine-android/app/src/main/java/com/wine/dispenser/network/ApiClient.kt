@@ -20,7 +20,8 @@ data class LoginResponse(
     val userId: Long,
     val role: Int,
     val ageVerified: Boolean,
-    val nickname: String
+    val nickname: String,
+    val isNewUser: Boolean = false
 )
 
 // 酒单

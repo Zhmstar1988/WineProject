@@ -1,5 +1,6 @@
 package com.wine.scheduler;
 
+import com.wine.service.OrderService;
 import com.wine.service.ReconcileService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,9 @@ public class ScheduledTasks {
     @Resource
     private ReconcileService reconcileService;
 
+    @Resource
+    private OrderService orderService;
+
     /**
      * 每日凌晨 02:00 执行 T+1 履约三单核对
      * 三向对齐：【主订单】↔【履约单】↔【通联授权状态】
@@ -35,10 +39,17 @@ public class ScheduledTasks {
 
     /**
      * 支付超时订单关闭（每分钟扫描）
-     * PENDING 超过 payExpireTime 自动关闭，释放 Redis 锁
+     * PENDING 超过 payExpireTime 自动关闭，释放预占容量
      */
     @Scheduled(cron = "0 * * * * ?")
     public void closeExpiredOrders() {
-        // TODO: 扫描超时未支付订单并关闭
+        try {
+            int count = orderService.closeExpiredOrders();
+            if (count > 0) {
+                log.info("超时订单关闭任务完成: 关闭{}笔", count);
+            }
+        } catch (Exception e) {
+            log.error("超时订单关闭任务异常", e);
+        }
     }
 }

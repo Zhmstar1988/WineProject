@@ -12,6 +12,7 @@ class AuthViewModel: ObservableObject {
     @Published var ageVerified: Bool = false
     @Published var userId: Int64? = nil
     @Published var nickname: String = ""
+    @Published var isNewUser: Bool = false
 
     func sendSMS(phone: String) async throws {
         try await APIClient.shared.requestVoid("/auth/sms/send", body: ["phone": phone])
@@ -34,6 +35,8 @@ class AuthViewModel: ObservableObject {
             self.userId = wrapper.data.userId
             self.ageVerified = wrapper.data.ageVerified
             self.nickname = wrapper.data.nickname
+            // 新用户引导：首次登录自动注册，提示完成注册完善流程
+            self.isNewUser = wrapper.data.isNewUser ?? false
         }
     }
 
