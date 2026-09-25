@@ -1,6 +1,7 @@
 package com.wine.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.wine.common.BusinessException;
 import com.wine.common.Result;
 import com.wine.common.UserContextHolder;
 import com.wine.domain.*;
@@ -157,18 +158,28 @@ public class AdminController {
         return Result.success(orderMainMapper.selectList(qw));
     }
 
-    /** 标准换瓶 SOP（单瓶位） */
+    /** 标准换瓶 SOP（单瓶位）- 仅酒吧管理员/平台管理员可操作 */
     @PostMapping("/change-bottle")
     public Result<Void> changeBottle(@Valid @RequestBody ChangeBottleReq req) {
+        checkBarOrPlatformAdmin();
         barOperationService.changeBottle(req);
         return Result.success();
     }
 
-    /** 批量换瓶（一次给多个瓶位同时换瓶，按酒款聚合扣减后备库存） */
+    /** 批量换瓶（一次给多个瓶位同时换瓶，按酒款聚合扣减后备库存）- 仅酒吧管理员/平台管理员可操作 */
     @PostMapping("/change-bottle/batch")
     public Result<Void> batchChangeBottle(@Valid @RequestBody BatchChangeBottleReq req) {
+        checkBarOrPlatformAdmin();
         barOperationService.batchChangeBottle(req);
         return Result.success();
+    }
+
+    /** 权限校验：仅酒吧管理员(role=2)或平台管理员(role=5)可操作 */
+    private void checkBarOrPlatformAdmin() {
+        Integer role = UserContextHolder.getRole();
+        if (role == null || (role != 2 && role != 5)) {
+            throw new BusinessException("无权限执行此操作，仅酒吧管理员或平台管理员可操作");
+        }
     }
 
     /** 履约核对日志 */
