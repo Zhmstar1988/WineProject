@@ -1,0 +1,84 @@
+# ============================================================
+# Prometheus 告警规则 - 葡萄酒售酒系统后端
+# 部署方式：将此文件放入 Prometheus 的 rule_files 配置目录并 reload
+# 告警通道：通过 AlertManager 路由到邮件/飞书/钉钉等
+# ============================================================
+groups:
+  - name: wine-backend-connection-pool
+    rules:
+      # HikariCP 活跃连接占比 >= 80%，持续 2 分钟
+      - alert: HikariCPHighActiveRatio
+        expr: |
+          hikaricp_connections_active / hikaricp_connections_max >= 0.80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HikariCP 活跃连接占比过高"
+          description: "实例 {{ $labels.instance }} 连接池活跃占比 {{ $value | humanizePercentage }}，可能存在连接泄漏或流量突增。"
+
+      # HikariCP 等待连接线程数 >= 10，持续 1 分钟
+      - alert: HikariCPPendingThreads
+        expr: hikaricp_connections_pending >= 10
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "HikariCP 等待连接线程数过多"
+          description: "实例 {{ $labels.instance }} 有 {{ $value }} 个线程在等待数据库连接，连接池可能已耗尽。"
+
+      # HikariCP 连接获取耗时 P99 > 1s，持续 2 分钟
+      - alert: HikariCPConnectionAcquireSlow
+        expr: |
+          hikaricp_connections_acquire_seconds{quantile="0.99"} > 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HikariCP 连接获取耗时过高"
+          description: "实例 {{ $labels.instance }} P99 连接获取耗时 {{ $value }}s，数据库响应可能变慢。"
+
+      # Redis 连接数 >= 80（配置上限 100 的 80%），持续 2 分钟
+      - alert: RedisHighConnectionCount
+        expr: lettuce_connection_connected >= 80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis 连接数过高"
+          description: "实例 {{ $labels.instance }} Redis 连接数 {{ $value }}，接近连接池上限。"
+
+  - name: wine-backend-availability
+    rules:
+      # 服务实例 down
+      - alert: WineBackendDown
+        expr: up{job="wine-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "后端服务不可用"
+          description: "实例 {{ $labels.instance }} 已下线超过 1 分钟。"
+
+      # HTTP 5xx 错误率 > 1%，持续 2 分钟
+      - alert: HighErrorRate
+        expr: |
+          rate(http_server_requests_seconds_count{status=~"5.."}[2m])
+          / rate(http_server_requests_seconds_count[2m]) > 0.01
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "HTTP 5xx 错误率过高"
+          description: "实例 {{ $labels.instance }} 5xx 错误率 {{ $value | humanizePercentage }}。"
+
+      # JVM 堆内存使用率 > 85%，持续 3 分钟
+      - alert: JVMHeapHighUsage
+        expr: |
+          jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"} > 0.85
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "JVM 堆内存使用率过高"
+          description: "实例 {{ $labels.instance }} 堆内存使用率 {{ $value | humanizePercentage }}。"

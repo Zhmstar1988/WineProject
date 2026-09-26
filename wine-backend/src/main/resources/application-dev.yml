@@ -34,5 +34,7 @@ allinpay-intl:
 # 测试环境日志级别
 logging:
   level:
-    com.wine: debug
-    org.springframework.security: info
+    com.wine: warn
+    org.springframework.security: warn
+    org.springframework: warn
+    com.zaxxer.hikari: warn

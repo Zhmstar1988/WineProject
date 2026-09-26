@@ -1,0 +1,90 @@
+name: Backend CI
+
+on:
+  push:
+    paths:
+      - 'wine-backend/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    paths:
+      - 'wine-backend/**'
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: winedb
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+
+      - name: Build with Maven
+        working-directory: wine-backend
+        run: mvn clean package -DskipTests -q
+
+      - name: Initialize database schema + data
+        working-directory: wine-backend
+        run: |
+          mysql -h 127.0.0.1 -uroot -proot winedb < src/main/resources/db/schema.sql
+          mysql -h 127.0.0.1 -uroot -proot winedb < src/main/resources/db/data.sql
+
+      - name: Run data consistency check
+        working-directory: wine-backend
+        run: |
+          echo "=== 初始化数据一致性校验 ==="
+          RESULT=$(mysql -h 127.0.0.1 -uroot -proot -N winedb < scripts/check-data-consistency.sql)
+          if [ -n "$RESULT" ]; then
+            echo "❌ 数据一致性校验失败，存在以下差异:"
+            echo "$RESULT"
+            echo "请检查 data.sql 中测试订单的容量扣减是否与订单出酒量匹配。"
+            exit 1
+          fi
+          echo "✅ 数据一致性校验通过：订单出酒量与瓶位容量扣减完全一致"
+
+      - name: Run unit tests
+        working-directory: wine-backend
+        env:
+          SPRING_PROFILES_ACTIVE: test
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: 6379
+        run: mvn test -q
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-reports
+          path: wine-backend/target/surefire-reports/
+          retention-days: 14

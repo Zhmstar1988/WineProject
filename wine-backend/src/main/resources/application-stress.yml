@@ -1,0 +1,55 @@
+# ============================================================
+# 压测环境配置 (SPRING_PROFILES_ACTIVE=stress)
+# 与 dev 的关键差异：
+#   1. 禁止执行 data.sql（避免测试订单污染对账数据）
+#   2. 日志级别固定 warn（避免输出过大）
+#   3. 连接池/线程按压测规模调优
+# 启动前提：数据库表结构已由 schema.sql 预先创建，data.sql 不执行
+# ============================================================
+
+spring:
+  sql:
+    init:
+      # 压测环境禁止执行初始化脚本（schema + data）
+      # 表结构需预先通过 schema.sql 或迁移脚本创建
+      mode: never
+  datasource:
+    hikari:
+      maximum-pool-size: 200
+      minimum-idle: 20
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      leak-detection-threshold: 600000
+  data:
+    redis:
+      lettuce:
+        pool:
+          max-active: 100
+          max-idle: 50
+          min-idle: 5
+          max-wait: 3000ms
+
+# 通联国际 - 压测环境使用 mock 模式
+allinpay-intl:
+  base-url: ${ALLINPAY_INTL_BASE_URL:https://test.allinpayhk.com/gateway}
+  mcht-id: ${ALLINPAY_INTL_MCHT_ID:MOCK_MCHT_ID_000}
+  version: V2.0.0
+  currency: SGD
+  trans-type-purchase: Purchase
+  trans-type-query: Query
+  trans-type-refund: Refund
+  private-key: ${ALLINPAY_INTL_PRIVATE_KEY:placeholder_private_key}
+  public-key: ${ALLINPAY_INTL_PUBLIC_KEY:placeholder_public_key}
+  notify-url: ${ALLINPAY_INTL_NOTIFY_URL:http://localhost:8080/api/payment/notify}
+  return-url: ${ALLINPAY_INTL_RETURN_URL:http://localhost:8080/payment/result}
+  pay-page-style: TINY
+  mock: true
+
+# 压测环境日志级别（强制 warn，禁止 debug/info 防止日志爆炸）
+logging:
+  level:
+    com.wine: warn
+    org.springframework.security: warn
+    org.springframework: warn
+    com.zaxxer.hikari: warn

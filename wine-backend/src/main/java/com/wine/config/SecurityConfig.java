@@ -41,6 +41,7 @@ public class SecurityConfig {
                 .requestMatchers(
                     "/auth/**",
                     "/health",
+                    "/actuator/**",
                     "/menu/**",
                     "/bar/by-code/**",
                     "/payment/notify",

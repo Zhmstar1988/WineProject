@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Logback 配置
+  - dev  profile: 控制台输出（方便本地调试）
+  - prod/stress profile: 异步文件输出 + 滚动策略（避免日志成为性能瓶颈）
+  - 异步 Appender 说明：Logback AsyncAppender 默认为单消费者线程，
+    通过队列缓冲日志写入，避免阻塞业务线程。
+-->
+<configuration scan="true" scanPeriod="30 seconds">
+
+    <!-- 日志文件存储路径 -->
+    <springProperty scope="context" name="LOG_PATH" source="logging.file.path" defaultValue="logs"/>
+    <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="wine-backend"/>
+
+    <!-- 统一日志格式 -->
+    <property name="LOG_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"/>
+
+    <!-- ============================================================ -->
+    <!-- 控制台 Appender（dev 环境使用）                              -->
+    <!-- ============================================================ -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- ============================================================ -->
+    <!-- 滚动文件 Appender（按天 + 大小滚动，保留 30 天，单文件 100MB）-->
+    <!-- ============================================================ -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/${APP_NAME}.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <!-- 按天归档，文件名含日期和索引 -->
+            <fileNamePattern>${LOG_PATH}/${APP_NAME}.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <!-- 单文件最大 100MB，超过则滚动到下一个索引 -->
+            <maxFileSize>100MB</maxFileSize>
+            <!-- 保留 30 天 -->
+            <maxHistory>30</maxHistory>
+            <!-- 所有日志文件总大小不超过 5GB，超过则删除最旧归档 -->
+            <totalSizeCap>5GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- ============================================================ -->
+    <!-- 异步 Appender（包裹 FILE，避免日志 I/O 阻塞业务线程）         -->
+    <!-- - queueSize: 队列容量，默认 256，压测可调大                      -->
+    <!-- - discardingThreshold: 队列剩余容量低于该比例时丢弃 TRACE/DEBUG -->
+    <!--   设为 0 表示不丢弃任何级别（保证 warn 以上不丢）               -->
+    <!-- - neverBlock: 队列满时不阻塞业务线程（true 可能丢日志）         -->
+    <!-- ============================================================ -->
+    <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>1024</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <neverBlock>false</neverBlock>
+        <appender-ref ref="FILE"/>
+    </appender>
+
+    <!-- ============================================================ -->
+    <!-- Profile 差异化日志输出                                        -->
+    <!-- ============================================================ -->
+
+    <!-- dev: 控制台 + 文件 -->
+    <springProfile name="dev">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </root>
+    </springProfile>
+
+    <!-- prod / stress: 仅异步文件输出，避免控制台 IO 开销 -->
+    <springProfile name="prod,stress">
+        <root level="INFO">
+            <appender-ref ref="ASYNC_FILE"/>
+        </root>
+    </springProfile>
+
+    <!-- 包级别日志覆盖（优先级高于 root） -->
+    <logger name="com.wine" level="${LOG_LEVEL:-WARN}"/>
+    <logger name="org.springframework.security" level="WARN"/>
+    <logger name="org.springframework" level="WARN"/>
+    <logger name="com.zaxxer.hikari" level="WARN"/>
+
+</configuration>

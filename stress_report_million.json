@@ -1,0 +1,42 @@
+{
+  "total_orders": 1000000,
+  "concurrency": 300,
+  "success": 1000000,
+  "failed": 0,
+  "success_rate": 100.0,
+  "total_time_sec": 2083.2,
+  "tps": 480.04,
+  "volume_distribution": {
+    "150": 500306,
+    "50": 499694
+  },
+  "latency": {
+    "create": {
+      "p50": 21,
+      "p95": 75,
+      "p99": 115
+    },
+    "pay": {
+      "p50": 37,
+      "p95": 58,
+      "p99": 70
+    },
+    "pay_cb": {
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "dispense": {
+      "p50": 17,
+      "p95": 32,
+      "p99": 41
+    },
+    "dispense_cb": {
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    }
+  },
+  "phase_failures": {},
+  "top_errors": {}
+}

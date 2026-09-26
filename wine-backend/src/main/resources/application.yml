@@ -2,6 +2,12 @@ server:
   port: ${SERVER_PORT:8080}
   servlet:
     context-path: /api
+  tomcat:
+    threads:
+      max: 400
+      min-spare: 50
+    max-connections: 10000
+    accept-count: 200
 
 spring:
   application:
@@ -16,11 +22,13 @@ spring:
     username: ${MYSQL_USERNAME:root}
     password: ${MYSQL_PASSWORD:root}
     hikari:
-      maximum-pool-size: 100
-      minimum-idle: 10
+      pool-name: WineHikariPool
+      maximum-pool-size: 200
+      minimum-idle: 20
       connection-timeout: 30000
       idle-timeout: 600000
       max-lifetime: 1800000
+      leak-detection-threshold: 60000
 
   sql:
     init:
@@ -38,9 +46,9 @@ spring:
       timeout: 3000ms
       lettuce:
         pool:
-          max-active: 50
-          max-idle: 20
-          min-idle: 0
+          max-active: 100
+          max-idle: 50
+          min-idle: 5
           max-wait: 3000ms
 
   jackson:
@@ -60,7 +68,7 @@ mybatis-plus:
   type-aliases-package: com.wine.domain
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
   global-config:
     db-config:
       id-type: ASSIGN_ID
@@ -120,8 +128,43 @@ wine:
   lock:
     in-machine-prefix: "wine:lock:slot:"
     user-lock-prefix: "wine:lock:user:"
+  # 连接池告警阈值（由 MetricsAlertService 定时检查并输出 warn 日志）
+  # 实际告警建议在 Prometheus AlertManager 中配置，此处提供应用内兜底
+  alert:
+    enabled: true
+    check-interval-ms: 30000
+    hikari-active-ratio-warn: 0.80    # 活跃连接占比 >= 80% 告警
+    hikari-pending-threshold: 10      # 等待连接的线程数 >= 10 告警
+    redis-active-ratio-warn: 0.80     # Redis 活跃连接占比 >= 80% 告警
 
 logging:
   level:
-    com.wine: ${LOG_LEVEL:debug}
-    org.springframework.security: info
+    com.wine: ${LOG_LEVEL:warn}
+    org.springframework.security: warn
+    org.springframework: warn
+    com.zaxxer.hikari: warn
+
+# ============================================================
+# Actuator + Micrometer 监控配置
+# Prometheus 指标端点: GET /api/actuator/prometheus
+# 健康检查端点:      GET /api/actuator/health
+# ============================================================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+      # 启用 HikariCP 连接池健康检查
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    export:
+      prometheus:
+        enabled: true
+        step: 10s

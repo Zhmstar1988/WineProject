@@ -79,7 +79,7 @@ public class OrderService {
     private String slotLockPrefix;
 
     private static final String IDEM_PREFIX = "wine:idem:order:";
-    private static final long IDEM_TTL_HOURS = 24;
+    private static final long IDEM_TTL_MINUTES = 10;
 
     /**
      * 下单
@@ -173,20 +173,28 @@ public class OrderService {
             throw new BusinessException("请先完成法定年龄校验");
         }
 
-        // 2. 查询酒单配置（后端统一计价）
+        // 2. 锁外预查瓶位，获取 slotId 用于精确匹配酒单（避免多瓶位同酒款导致 selectOne 返回多行）
+        DispenserSlot slot = dispenserSlotMapper.selectOne(
+                new LambdaQueryWrapper<DispenserSlot>()
+                        .eq(DispenserSlot::getDispenserId, req.getDispenserId())
+                        .eq(DispenserSlot::getSlotNo, req.getSlotNo()));
+        if (slot == null) throw new BusinessException("瓶位不存在");
+
+        // 3. 查询酒单配置（后端统一计价）—— 必须带 slotId，否则同酒款多瓶位会命中多行
         BarWineMenu menu = barWineMenuMapper.selectOne(
                 new LambdaQueryWrapper<BarWineMenu>()
                         .eq(BarWineMenu::getBarId, req.getBarId())
                         .eq(BarWineMenu::getDispenserId, req.getDispenserId())
+                        .eq(BarWineMenu::getSlotId, slot.getId())
                         .eq(BarWineMenu::getWineSkuId, req.getWineSkuId())
                         .eq(BarWineMenu::getVolumeMl, req.getVolumeMl())
                         .eq(BarWineMenu::getStatus, 1));
         if (menu == null) throw new BusinessException("酒单配置不存在或已下架");
 
-        // 3. 锁外预查酒吧（不依赖瓶位并发，提前到锁外减少锁持有时间）
+        // 4. 锁外预查酒吧（不依赖瓶位并发，提前到锁外减少锁持有时间）
         Bar bar = barMapper.selectById(req.getBarId());
 
-        // 4. Redis 分布式锁锁定瓶位，检查在机余量防超卖
+        // 5. Redis 分布式锁锁定瓶位，检查在机余量防超卖
         String lockKey = slotLockPrefix + req.getDispenserId() + ":" + req.getSlotNo();
         String lockValue = UUID.randomUUID().toString();
         boolean locked = false;
@@ -194,12 +202,6 @@ public class OrderService {
         try {
             locked = redisLock.lockWithTimeout(lockKey, lockValue, 3000, 15);
             if (!locked) throw new BusinessException("当前瓶位繁忙，请稍后重试");
-
-            DispenserSlot slot = dispenserSlotMapper.selectOne(
-                    new LambdaQueryWrapper<DispenserSlot>()
-                            .eq(DispenserSlot::getDispenserId, req.getDispenserId())
-                            .eq(DispenserSlot::getSlotNo, req.getSlotNo()));
-            if (slot == null) throw new BusinessException("瓶位不存在");
 
             // 原子扣减在机容量（数据库行锁保证并发安全，防超卖）
             int affected = dispenserSlotMapper.deductCapacity(
@@ -226,9 +228,8 @@ public class OrderService {
             if (bar != null) order.setCusid(bar.getCusid());
             orderMainMapper.insert(order);
 
-            log.info("订单创建成功: orderNo={}, userId={}, slot={}:{}, volume={}ml, remain={}ml",
-                    order.getOrderNo(), userId, req.getDispenserId(), req.getSlotNo(), req.getVolumeMl(),
-                    slot.getCurrentCapacity() - req.getVolumeMl());
+            log.info("订单创建成功: orderNo={}, userId={}, slot={}:{}, volume={}ml",
+                    order.getOrderNo(), userId, req.getDispenserId(), req.getSlotNo(), req.getVolumeMl());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new BusinessException("系统繁忙，请重试");
@@ -241,7 +242,7 @@ public class OrderService {
         if (cacheKey != null) {
             try {
                 stringRedisTemplate.opsForValue().set(cacheKey, objectMapper.writeValueAsString(resp),
-                        IDEM_TTL_HOURS, TimeUnit.HOURS);
+                        IDEM_TTL_MINUTES, TimeUnit.MINUTES);
             } catch (Exception e) {
                 log.warn("幂等缓存写入失败: cacheKey={}", cacheKey, e);
             }

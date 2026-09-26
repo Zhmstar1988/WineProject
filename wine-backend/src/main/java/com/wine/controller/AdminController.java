@@ -24,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 管理后台接口（平台运营端 + 酒吧营业端）
@@ -153,8 +154,22 @@ public class AdminController {
         if (role != null && role == 2) {
             Long barId = UserContextHolder.get().getBarId();
             qw.eq(OrderMain::getBarId, barId);
+        } else if (role != null && role == 6) {
+            Long supplierId = UserContextHolder.get().getSupplierId();
+            if (supplierId != null) {
+                List<Long> skuIds = wineSkuMapper.selectList(
+                        new LambdaQueryWrapper<WineSku>().eq(WineSku::getSupplierId, supplierId)
+                ).stream().map(WineSku::getId).collect(Collectors.toList());
+                if (skuIds.isEmpty()) {
+                    qw.eq(OrderMain::getId, -1L);
+                } else {
+                    qw.in(OrderMain::getWineSkuId, skuIds);
+                }
+            } else {
+                qw.eq(OrderMain::getId, -1L);
+            }
         }
-        qw.orderByDesc(OrderMain::getCreateTime);
+        qw.orderByDesc(OrderMain::getCreateTime).last("LIMIT 500");
         return Result.success(orderMainMapper.selectList(qw));
     }
 
@@ -182,11 +197,25 @@ public class AdminController {
         }
     }
 
-    /** 履约核对日志 */
+    /** 履约核对日志（按角色隔离：酒吧/出酒商只看本店/本酒款相关） */
     @GetMapping("/reconcile")
     public Result<List<ReconcileLog>> listReconcile() {
-        return Result.success(reconcileLogMapper.selectList(
-                new LambdaQueryWrapper<ReconcileLog>().orderByDesc(ReconcileLog::getCreateTime)));
+        LambdaQueryWrapper<ReconcileLog> qw = new LambdaQueryWrapper<ReconcileLog>()
+                .orderByDesc(ReconcileLog::getCreateTime);
+        Integer role = UserContextHolder.getRole();
+        if (role != null && role == 2) {
+            Long barId = UserContextHolder.get().getBarId();
+            qw.apply("order_no IN (SELECT order_no FROM order_main WHERE bar_id = {0})", barId);
+        } else if (role != null && role == 6) {
+            Long supplierId = UserContextHolder.get().getSupplierId();
+            if (supplierId != null) {
+                qw.apply("order_no IN (SELECT o.order_no FROM order_main o JOIN wine_sku s ON o.wine_sku_id = s.id WHERE s.supplier_id = {0})", supplierId);
+            } else {
+                qw.eq(ReconcileLog::getId, -1L);
+            }
+        }
+        qw.last("LIMIT 500");
+        return Result.success(reconcileLogMapper.selectList(qw));
     }
 
     /** 手动触发三向核对跑批（指定日期，默认昨天） */
@@ -232,6 +261,21 @@ public class AdminController {
             // 酒吧端：只看本店
             Long userBarId = UserContextHolder.get().getBarId();
             qw.eq(OrderMain::getBarId, userBarId);
+        } else if (role != null && role == 6) {
+            // 出酒商端：只看自己供应酒款的订单
+            Long supplierId = UserContextHolder.get().getSupplierId();
+            if (supplierId != null) {
+                List<Long> skuIds = wineSkuMapper.selectList(
+                        new LambdaQueryWrapper<WineSku>().eq(WineSku::getSupplierId, supplierId)
+                ).stream().map(WineSku::getId).collect(Collectors.toList());
+                if (skuIds.isEmpty()) {
+                    qw.eq(OrderMain::getId, -1L);
+                } else {
+                    qw.in(OrderMain::getWineSkuId, skuIds);
+                }
+            } else {
+                qw.eq(OrderMain::getId, -1L);
+            }
         } else if (barId != null) {
             // 平台端指定酒吧
             qw.eq(OrderMain::getBarId, barId);

@@ -81,3 +81,11 @@ INSERT INTO dispense_ticket (id, order_no, order_id, user_id, dispenser_id, slot
 -- 场景5：异常D-授权不一致 - 本地支付状态为0，但通联返回1(成功)
 INSERT INTO order_main (id, order_no, user_id, bar_id, cusid, dispenser_id, slot_no, wine_sku_id, volume_ml, original_amount, discount_amount, paid_amount, status, pay_status, transaction_id, pay_time, create_time) VALUES
 (10005, 'TEST20260924005', 9002, 1001, 'CUSID_SG_001', 3001, 2, 2002, 50, 15.00, 0, 15.00, 1, 0, 'TXN005', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- 测试订单对应容量扣减（保证库存一致性）
+-- 3001:1: TEST001(50ml) + TEST004(150ml) = 200ml
+UPDATE dispenser_slot SET current_capacity = current_capacity - 200 WHERE dispenser_id = 3001 AND slot_no = 1;
+-- 3001:2: TEST002(150ml) + TEST005(50ml) = 200ml
+UPDATE dispenser_slot SET current_capacity = current_capacity - 200 WHERE dispenser_id = 3001 AND slot_no = 2;
+-- 3001:3: TEST003(50ml) = 50ml
+UPDATE dispenser_slot SET current_capacity = current_capacity - 50 WHERE dispenser_id = 3001 AND slot_no = 3;
