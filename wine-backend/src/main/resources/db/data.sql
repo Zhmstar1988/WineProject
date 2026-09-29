@@ -21,9 +21,9 @@ INSERT INTO dispenser (id, bar_id, device_no, mac, device_name, slot_count, stat
 -- 分酒机瓶位（含初始容量）
 INSERT INTO dispenser_slot (id, dispenser_id, slot_no, wine_sku_id, initial_capacity, current_capacity, batch_no, residual_ml, need_calibration) VALUES
 (4001, 3001, 1, 2001, 750, 750, 'BATCH20260901', 0, FALSE),
-(4002, 3001, 2, 2002, 750, 600, 'BATCH20260901', 0, FALSE),
+(4002, 3001, 2, 2002, 750, 750, 'BATCH20260901', 0, FALSE),
 (4003, 3001, 3, 2003, 750, 750, 'BATCH20260902', 0, FALSE),
-(4004, 3002, 1, 2001, 750, 500, 'BATCH20260901', 5, FALSE),
+(4004, 3002, 1, 2001, 750, 750, 'BATCH20260901', 0, FALSE),
 (4005, 3002, 2, 2002, 750, 750, 'BATCH20260903', 0, FALSE);
 
 -- 酒吧酒单（杯量规格与售价）
